@@ -90,14 +90,22 @@ export default function App() {
         />
       </div>
 
-      {/* Glass route panel */}
-      <div className="absolute bottom-0 left-72 right-0 z-10">
-        <RoutePanel
-          routes={routes}
-          selected={selectedRoute}
-          onSelect={setSelectedRoute}
-        />
-      </div>
+    {/* Glass route panel — fades in once routes are calculated */}
+    <div
+      className="absolute bottom-0 left-72 right-0 z-10"
+      style={{
+        opacity: routes.length > 0 ? 1 : 0,
+        transform: routes.length > 0 ? 'translateY(0)' : 'translateY(20px)',
+        transition: 'opacity 0.6s ease, transform 0.6s ease',
+        pointerEvents: routes.length > 0 ? 'all' : 'none',
+      }}
+    >
+      <RoutePanel
+        routes={routes}
+        selected={selectedRoute}
+        onSelect={setSelectedRoute}
+      />
+    </div>
 
       {showReport && (
         <ReportModal

@@ -25,23 +25,22 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
       }}
     >
       {/* Tooltip card */}
-        <div
+      <div
         onClick={dismiss}
         style={{
-            position: 'absolute',
-            bottom: '230px',
-            left: '50%',
-            transform: 'translateX(60%)',
-            background: 'rgba(255,255,255,0.07)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: '0.5px solid rgba(255,255,255,0.15)',
-            borderRadius: '12px',
-            padding: '20px 24px',
-            width: '320px',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        position: 'absolute',
+        top: '120px',
+        left: '330px',  // 288px wide + gap
+        background: 'rgba(255,255,255,0.07)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: '0.5px solid rgba(255,255,255,0.15)',
+        borderRadius: '12px',
+        padding: '20px 24px',
+        width: '290px',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
         }}
-        >
+      >
         {/* Close button */}
         <button
           onClick={dismiss}
@@ -61,7 +60,7 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
           ×
         </button>
 
-        {/* Ship icon + title */}
+        {/* Title */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
           <div style={{
             width: '32px',
@@ -78,10 +77,7 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
           </div>
           <div>
             <p style={{ color: '#00bfff', fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', fontFamily: 'ui-monospace, monospace', margin: 0 }}>
-              Mission Briefing
-            </p>
-            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', fontWeight: 500, margin: 0, fontFamily: 'ui-monospace, monospace' }}>
-              MV Cargo · San Francisco → LA
+              Welcome!
             </p>
           </div>
         </div>
@@ -89,9 +85,10 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
         {/* Steps */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
           {[
-            { step: '1', text: 'Select a route below — ECO avoids whale zones', color: '#5cb85c' },
-            { step: '2', text: 'Adjust speed to see your noise footprint change', color: '#00bfff' },
-            { step: '3', text: 'Generate an ESG report for your voyage', color: '#a78bfa' },
+            { step: '1', text: 'Select a departure and arrival port above', color: '#00bfff', highlight: true },
+            { step: '2', text: 'Choose a route', color: '#5cb85c' },
+            { step: '3', text: 'Adjust speed to see your noise footprint', color: '#f5a623' },
+            { step: '4', text: 'Generate an ESG report for your voyage', color: '#a78bfa' },
           ].map(s => (
             <div key={s.step} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
               <div style={{
@@ -99,7 +96,7 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
                 height: '18px',
                 borderRadius: '50%',
                 background: `${s.color}22`,
-                border: `0.5px solid ${s.color}66`,
+                border: `0.5px solid ${s.color}${s.highlight ? 'cc' : '66'}`,
                 color: s.color,
                 fontSize: '10px',
                 display: 'flex',
@@ -107,10 +104,18 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
                 justifyContent: 'center',
                 flexShrink: 0,
                 fontFamily: 'ui-monospace, monospace',
+                boxShadow: s.highlight ? `0 0 6px ${s.color}44` : 'none',
               }}>
                 {s.step}
               </div>
-              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', margin: 0, lineHeight: 1.5, fontFamily: 'ui-monospace, monospace' }}>
+              <p style={{
+                color: s.highlight ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)',
+                fontSize: '11px',
+                margin: 0,
+                lineHeight: 1.5,
+                fontFamily: 'ui-monospace, monospace',
+                fontWeight: s.highlight ? 500 : 400,
+              }}>
                 {s.text}
               </p>
             </div>
@@ -122,24 +127,24 @@ export default function UserNavigation({ onDismiss }: UserNavigationProps) {
           click anywhere to dismiss
         </p>
 
-        {/* Bouncing arrow — positioned below card */}
+        {/* Bouncing arrow pointing left to sidebar */}
         <div style={{
-          position: 'absolute',
-          bottom: '-35px',
-          left: '50%',
-          transform: 'translateX(60%)',
-          color: 'rgba(255,255,255,0.5)',
-          fontSize: '28px',
-          animation: 'bounceArrow 1s ease-in-out infinite',
+        position: 'absolute',
+        top: '27%',
+        left: '-25px',
+        transform: 'translateY(-50%)',
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: '28px',
+        animation: 'bounceArrow 1s ease-in-out infinite',
         }}>
-          ↓
+        ←
         </div>
       </div>
 
       <style>{`
         @keyframes bounceArrow {
-          0%, 100% { transform: translateX(-50%) translateY(0); }
-          50%       { transform: translateX(-50%) translateY(6px); }
+        0%, 100% { transform: translateY(-50%) translateX(0); }
+        50%       { transform: translateY(-50%) translateX(-6px); }
         }
       `}</style>
     </div>

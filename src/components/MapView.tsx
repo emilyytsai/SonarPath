@@ -501,7 +501,7 @@ export default function MapView({
 
     overlayLayer.add(new Graphic({
       geometry: new Extent({ xmin: -180, ymin: -90, xmax: 180, ymax: 90, spatialReference: { wkid: 4326 } }),
-      symbol: new SimpleFillSymbol({ color: [8, 8, 23, 0.55], outline: { width: 0 } }),
+      symbol: new SimpleFillSymbol({ color: [8, 8, 23, 0.70], outline: { width: 0 } }),
     }))
 
     viewRef.current = view

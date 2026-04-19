@@ -199,3 +199,7 @@ button:active {
   mask-composite: exclude;
   pointer-events: none;
 }
+
+aside::-webkit-scrollbar {
+  display: none;
+}

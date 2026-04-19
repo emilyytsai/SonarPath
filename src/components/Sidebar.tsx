@@ -31,6 +31,8 @@ export default function Sidebar({
 }: SidebarProps) {
   const [advice, setAdvice] = useState<string>('')
   const [loadingAdvice, setLoadingAdvice] = useState(false)
+  const [startOpen, setStartOpen] = useState(false)
+  const [endOpen, setEndOpen] = useState(false)
 
   const radiusNm = getNoiseRadius(shipSpeed, shipType)
   const nearbySightings = sightings.filter(s => {
@@ -67,42 +69,163 @@ export default function Sidebar({
       WebkitBackdropFilter: 'blur(24px)',
       borderRight: '0.5px solid rgba(255, 255, 255, 0.15)',
       boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.08), 2px 0 20px rgba(0,0,0,0.1)',
+      scrollbarWidth: 'none',
+      msOverflowStyle: 'none',
     }}>
       {/* Header */}
       <div className="pl-3 py-4" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <img src="/logo.svg" alt="SonarPath" style={{ height: '70px', width: '250px' }} />
+        <img src="/logo.svg" alt="SonarPath" style={{ width: '100%', maxWidth: '250px', height: 'auto' }} />
       </div>
 
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">
+
         {/* Port selection */}
         <div className="flex flex-col gap-3">
+
+          {/* Departure Port */}
           <div>
             <label className="block text-gray-200 text-xs uppercase tracking-widest mb-1.5">Departure Port</label>
-            <select
-              value={startPortKey}
-              onChange={e => onStartPortChange(e.target.value)}
-              className="w-full rounded border border-cyan-500/30 bg-white/5 text-gray-200 text-xs px-3 py-2 focus:outline-none focus:border-cyan-500/60"
-              style={{ backdropFilter: 'blur(6px)' }}
-            >
-              <option value="" style={{ background: '#0a0e1e' }}>— Select —</option>
-              {Object.entries(PORTS).map(([key, p]) => (
-                <option key={key} value={key} style={{ background: '#0a0e1e' }}>{p.name}</option>
-              ))}
-            </select>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setStartOpen(!startOpen); setEndOpen(false) }}
+                style={{
+                  width: '100%',
+                  background: 'rgba(0, 191, 255, 0.04)',
+                  border: '0.5px solid rgba(0, 191, 255, 0.25)',
+                  borderRadius: startOpen ? '8px 8px 0 0' : '8px',
+                  color: startPortKey ? '#e2e8f0' : '#64748b',
+                  fontSize: '11px',
+                  padding: '8px 32px 8px 12px',
+                  cursor: 'pointer',
+                  letterSpacing: '0.05em',
+                  fontFamily: 'ui-monospace, monospace',
+                  textAlign: 'left',
+                  position: 'relative',
+                }}
+              >
+                {startPortKey ? PORTS[startPortKey]?.name : '— Select —'}
+                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(0,191,255,0.5)', fontSize: '10px' }}>
+                  {startOpen ? '▴' : '▾'}
+                </span>
+              </button>
+              {startOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  background: 'rgba(10, 14, 30, 0.95)',
+                  backdropFilter: 'blur(24px)',
+                  WebkitBackdropFilter: 'blur(24px)',
+                  border: '0.5px solid rgba(0, 191, 255, 0.25)',
+                  borderTop: 'none',
+                  borderRadius: '0 0 8px 8px',
+                  zIndex: 100,
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                }}>
+                  <div
+                    onClick={() => { onStartPortChange(''); setStartOpen(false) }}
+                    style={{ padding: '8px 12px', fontSize: '11px', color: '#64748b', cursor: 'pointer', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.05em' }}
+                  >
+                    — Select —
+                  </div>
+                  {Object.entries(PORTS).map(([key, p]) => (
+                    <div
+                      key={key}
+                      onClick={() => { onStartPortChange(key); setStartOpen(false) }}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '11px',
+                        color: startPortKey === key ? '#00bfff' : '#e2e8f0',
+                        background: startPortKey === key ? 'rgba(0,191,255,0.08)' : 'transparent',
+                        cursor: 'pointer',
+                        fontFamily: 'ui-monospace, monospace',
+                        letterSpacing: '0.05em',
+                        borderTop: '0.5px solid rgba(255,255,255,0.04)',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,191,255,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = startPortKey === key ? 'rgba(0,191,255,0.08)' : 'transparent')}
+                    >
+                      {p.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Arrival Port */}
           <div>
             <label className="block text-gray-200 text-xs uppercase tracking-widest mb-1.5">Arrival Port</label>
-            <select
-              value={endPortKey}
-              onChange={e => onEndPortChange(e.target.value)}
-              className="w-full rounded border border-red-500/30 bg-white/5 text-gray-200 text-xs px-3 py-2 focus:outline-none focus:border-red-500/60"
-              style={{ backdropFilter: 'blur(6px)' }}
-            >
-              <option value="" style={{ background: '#0a0e1e' }}>— Select —</option>
-              {Object.entries(PORTS).map(([key, p]) => (
-                <option key={key} value={key} style={{ background: '#0a0e1e' }}>{p.name}</option>
-              ))}
-            </select>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setEndOpen(!endOpen); setStartOpen(false) }}
+                style={{
+                  width: '100%',
+                  background: 'rgba(239, 68, 68, 0.04)',
+                  border: '0.5px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: endOpen ? '8px 8px 0 0' : '8px',
+                  color: endPortKey ? '#e2e8f0' : '#64748b',
+                  fontSize: '11px',
+                  padding: '8px 32px 8px 12px',
+                  cursor: 'pointer',
+                  letterSpacing: '0.05em',
+                  fontFamily: 'ui-monospace, monospace',
+                  textAlign: 'left',
+                  position: 'relative',
+                }}
+              >
+                {endPortKey ? PORTS[endPortKey]?.name : '— Select —'}
+                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(239,68,68,0.5)', fontSize: '10px' }}>
+                  {endOpen ? '▴' : '▾'}
+                </span>
+              </button>
+              {endOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  background: 'rgba(10, 14, 30, 0.95)',
+                  backdropFilter: 'blur(24px)',
+                  WebkitBackdropFilter: 'blur(24px)',
+                  border: '0.5px solid rgba(239, 68, 68, 0.25)',
+                  borderTop: 'none',
+                  borderRadius: '0 0 8px 8px',
+                  zIndex: 100,
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                }}>
+                  <div
+                    onClick={() => { onEndPortChange(''); setEndOpen(false) }}
+                    style={{ padding: '8px 12px', fontSize: '11px', color: '#64748b', cursor: 'pointer', fontFamily: 'ui-monospace, monospace', letterSpacing: '0.05em' }}
+                  >
+                    — Select —
+                  </div>
+                  {Object.entries(PORTS).map(([key, p]) => (
+                    <div
+                      key={key}
+                      onClick={() => { onEndPortChange(key); setEndOpen(false) }}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '11px',
+                        color: endPortKey === key ? '#ef4444' : '#e2e8f0',
+                        background: endPortKey === key ? 'rgba(239,68,68,0.08)' : 'transparent',
+                        cursor: 'pointer',
+                        fontFamily: 'ui-monospace, monospace',
+                        letterSpacing: '0.05em',
+                        borderTop: '0.5px solid rgba(255,255,255,0.04)',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.06)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = endPortKey === key ? 'rgba(239,68,68,0.08)' : 'transparent')}
+                    >
+                      {p.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -138,14 +261,14 @@ export default function Sidebar({
             <label className="text-gray-200 text-xs uppercase tracking-widest">Speed</label>
             <span className="text-cyan-400 font-mono text-sm">{shipSpeed} kn</span>
           </div>
-        <input
-          type="range" min={3} max={25} step={1} value={shipSpeed}
-          onChange={e => onSpeedChange(Number(e.target.value))}
-          className="w-full"
-          style={{
-            '--val': `${((shipSpeed - 3) / (25 - 3)) * 100}%`
-          } as React.CSSProperties}
-        />
+          <input
+            type="range" min={3} max={25} step={1} value={shipSpeed}
+            onChange={e => onSpeedChange(Number(e.target.value))}
+            className="w-full"
+            style={{
+              '--val': `${((shipSpeed - 3) / (25 - 3)) * 100}%`
+            } as React.CSSProperties}
+          />
           <div className="flex justify-between text-gray-400 text-xs mt-1">
             <span>3 kn</span><span>25 kn</span>
           </div>
@@ -185,7 +308,6 @@ export default function Sidebar({
             <p className="text-2xl font-mono text-purple-400">{sightings.length}</p>
             <p className="text-gray-200 text-xs mt-0.5">Sightings</p>
           </div>
-        {/* Alert count */}
           <div className="glow-border3 rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.15)' }}>
             <p className="text-2xl font-mono text-orange-400">{alerts.length}</p>
             <p className="text-gray-200 text-xs mt-0.5">Alerts</p>
