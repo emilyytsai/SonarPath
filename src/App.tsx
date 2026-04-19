@@ -19,6 +19,7 @@ export default function App() {
   const [showReport, setShowReport] = useState(false)
   const [loadError, setLoadError]   = useState<string | null>(null)
   const [showIntro, setShowIntro]   = useState(true)
+  const [showWelcome, setShowWelcome] = useState(false)
   const [startPortKey, setStartPortKey] = useState('')
   const [endPortKey,   setEndPortKey]   = useState('')
 

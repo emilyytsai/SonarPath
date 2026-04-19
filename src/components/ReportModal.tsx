@@ -89,7 +89,7 @@ ${alerts.length > 0 ? '• Reduce speed to below 10 knots to decrease halo radiu
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="glow-border rounded-lg p-4 w-[680px] max-h-[80vh]"
+      <div className="glow-border rounded-lg flex flex-col w-[680px] max-h-[80vh] overflow-hidden"
         style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.15)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">

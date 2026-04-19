@@ -151,23 +151,6 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* Sustainability slider (placeholder) */}
-        <div className="opacity-50">
-          <div className="flex justify-between items-center mb-2">
-            <label className="text-gray-200 text-xs uppercase tracking-widest">Sustainability</label>
-            <span className="text-emerald-400 font-mono text-sm">–</span>
-          </div>
-          <input
-            type="range" min={0} max={100} step={1} defaultValue={50}
-            disabled
-            className="w-full"
-          />
-          <div className="flex justify-between text-gray-500 text-xs mt-1">
-            <span>Speed</span><span>Eco</span>
-          </div>
-          <p className="text-gray-500 text-xs mt-1">Coming soon — will weight route visibility</p>
-        </div>
-
         {/* Noise footprint stats */}
         <div className="glow-border rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.15)' }}>
           <p className="text-gray-200 text-xs uppercase tracking-widest mb-3">Noise Footprint</p>

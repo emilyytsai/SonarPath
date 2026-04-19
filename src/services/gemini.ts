@@ -12,7 +12,7 @@ export interface CaptainContext {
 }
 
 export async function generateCaptainAdvice(ctx: CaptainContext): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const alertText = ctx.alerts.length > 0
     ? ctx.alerts.map(a => a.message).join('; ')
@@ -44,7 +44,7 @@ export async function generateESGReport(ctx: CaptainContext & {
   fuelSavedTons: number
   co2SavedTons: number
 }): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const prompt = `Generate a concise ESG compliance report for a maritime voyage.
 

@@ -49,17 +49,27 @@ function solveSeaSegment(
 
 // Offset a path laterally (west = negative lngOffset) with a sine taper so
 // endpoints stay pinned and only the middle section bulges offshore.
-// This is used to derive distinct Suggested / Eco routes from the direct path
-// instead of fighting marnet node snapping with intermediate waypoints.
-function taperedOffsetPath(
+// Near land (e.g. Puget Sound), the offset is stepped down toward 0 so routes
+// converge to the direct path rather than crossing land.
+function landAwareOffsetPath(
   base: [number, number][],
   lngOffset: number,
+  landPolygons: Polygon[],
 ): [number, number][] {
   const n = base.length
   return base.map(([lng, lat], i) => {
     const t = n > 1 ? i / (n - 1) : 0.5
-    const weight = Math.sin(t * Math.PI) // 0 at endpoints, 1 at midpoint
-    return [lng + lngOffset * weight, lat] as [number, number]
+    const weight = Math.sin(t * Math.PI)
+    const fullOffset = lngOffset * weight
+    if (landPolygons.length === 0 || fullOffset === 0) return [lng + fullOffset, lat] as [number, number]
+    for (const scale of [1, 0.75, 0.5, 0.25, 0]) {
+      const testLng = lng + fullOffset * scale
+      const pt = new Point({ longitude: testLng, latitude: lat, spatialReference: { wkid: 4326 } })
+      if (!landPolygons.some(poly => geometryEngine.intersects(poly, pt))) {
+        return [testLng, lat] as [number, number]
+      }
+    }
+    return [lng, lat] as [number, number]
   })
 }
 
@@ -129,6 +139,7 @@ export default function MapView({
   // Refs used across effects without triggering re-runs
   const corridorSightingsRef = useRef<WhaleSighting[]>([])
   const directPathRef        = useRef<[number, number][] | null>(null)
+  const landPolygonsRef      = useRef<Polygon[]>([])
   const shipTypeRef          = useRef(shipType)
   const startPortRef         = useRef<[number, number] | null>(null)
   const endPortRef           = useRef<[number, number] | null>(null)
@@ -216,10 +227,9 @@ export default function MapView({
     start: [number, number],
     end: [number, number],
   ): Promise<WhaleSighting[]> => {
-    // Distribute whales along the actual sea route so they span the full corridor
     const routeCoords = solveSeaSegment(start, end)
 
-    // Build cumulative segment lengths for uniform sampling along the polyline
+    // Build cumulative distances for uniform polyline sampling
     const segLengths: number[] = []
     let totalLen = 0
     for (let i = 1; i < routeCoords.length; i++) {
@@ -230,7 +240,6 @@ export default function MapView({
       totalLen += len
     }
 
-    // Sample a random [lng, lat] uniformly along the polyline
     const sampleOnRoute = (): [number, number] => {
       let t = Math.random() * totalLen
       for (let i = 0; i < segLengths.length; i++) {
@@ -246,28 +255,26 @@ export default function MapView({
       return [...routeCoords[routeCoords.length - 1]] as [number, number]
     }
 
-    // Scatter whales within ~0.25 deg of the direct path so they sit visually on it.
-    // The eco route is offset ~1.6 deg west, so it clearly avoids this corridor.
-    const SCATTER = 0.25
-
     const lngs = routeCoords.map(c => c[0])
     const lats  = routeCoords.map(c => c[1])
-    const lngMin = Math.min(...lngs) - SCATTER
-    const lngMax = Math.max(...lngs) + SCATTER
-    const latMin = Math.min(...lats) - SCATTER
-    const latMax = Math.max(...lats) + SCATTER
+    // Wide bbox: covers route offsets (1.6° west) and generous scatter in all directions
+    const bboxLngMin = Math.min(...lngs) - 2.5
+    const bboxLngMax = Math.max(...lngs) + 1.5
+    const bboxLatMin = Math.min(...lats) - 1.5
+    const bboxLatMax = Math.max(...lats) + 1.5
 
     let landPolygons: Polygon[] = []
     const landLayer = landLayerRef.current
     if (landLayer) {
       try {
         const result = await landLayer.queryFeatures({
-          geometry: new Extent({ xmin: lngMin, ymin: latMin, xmax: lngMax, ymax: latMax, spatialReference: { wkid: 4326 } }),
+          geometry: new Extent({ xmin: bboxLngMin, ymin: bboxLatMin, xmax: bboxLngMax, ymax: bboxLatMax, spatialReference: { wkid: 4326 } }),
           spatialRelationship: 'intersects',
           returnGeometry: true,
           outFields: [],
         })
         landPolygons = result.features.map(f => f.geometry as Polygon)
+        landPolygonsRef.current = landPolygons
       } catch (e) {
         console.warn('[SonarPath] land query failed — skipping land check:', e)
       }
@@ -279,25 +286,64 @@ export default function MapView({
       return landPolygons.some(poly => geometryEngine.intersects(poly, pt))
     }
 
-    const target = 10 + Math.floor(Math.random() * 6)
-    const today  = new Date().toISOString().split('T')[0]
-    const whales: WhaleSighting[] = []
-    let attempts = 0
+    // Weighted confidence: most sightings are low/medium certainty
+    const weightedConfidence = (): WhaleSighting['confidence'] => {
+      const r = Math.random()
+      return r < 0.15 ? 'high' : r < 0.55 ? 'medium' : 'low'
+    }
 
-    while (whales.length < target && attempts < target * 15) {
-      attempts++
-      const [baseLng, baseLat] = sampleOnRoute()
-      const lng = baseLng + (Math.random() - 0.5) * SCATTER * 2
-      const lat = baseLat + (Math.random() - 0.5) * SCATTER * 2
+    const today = new Date().toISOString().split('T')[0]
+    const whales: WhaleSighting[] = []
+    let uid = 0
+    const tryAdd = (lng: number, lat: number) => {
       if (!isOnLand(lng, lat)) {
         whales.push({
-          id: `corridor-${Date.now()}-${whales.length}`,
+          id: `whale-${Date.now()}-${uid++}`,
           species: WHALE_SPECIES[Math.floor(Math.random() * WHALE_SPECIES.length)],
-          lat, lng,
-          date: today,
-          confidence: CONFIDENCES[Math.floor(Math.random() * CONFIDENCES.length)],
+          lat, lng, date: today,
+          confidence: weightedConfidence(),
         })
+        return true
       }
+      return false
+    }
+
+    // ── 1. Corridor whales: near the direct path (eco route visually avoids these)
+    const corridorTarget = 5 + Math.floor(Math.random() * 4)
+    let a = 0
+    while (whales.length < corridorTarget && a++ < corridorTarget * 20) {
+      const [baseLng, baseLat] = sampleOnRoute()
+      tryAdd(baseLng + (Math.random() - 0.5) * 0.6, baseLat + (Math.random() - 0.5) * 0.5)
+    }
+
+    // ── 2. Hotspot clusters: simulate natural feeding/breeding aggregations
+    const numClusters = 2 + Math.floor(Math.random() * 2)
+    for (let c = 0; c < numClusters; c++) {
+      // Find an ocean point offset from the route to anchor the cluster
+      let center: [number, number] | null = null
+      for (let t = 0; t < 40 && !center; t++) {
+        const [bLng, bLat] = sampleOnRoute()
+        const offLng = (Math.random() > 0.5 ? 1 : -1) * (0.4 + Math.random() * 1.2)
+        const offLat = (Math.random() - 0.5) * 1.2
+        if (!isOnLand(bLng + offLng, bLat + offLat)) center = [bLng + offLng, bLat + offLat]
+      }
+      if (!center) continue
+      const clusterSize = 2 + Math.floor(Math.random() * 4)
+      let ca = 0, added = 0
+      while (added < clusterSize && ca++ < clusterSize * 25) {
+        const r = 0.1 + Math.random() * 0.5
+        const angle = Math.random() * Math.PI * 2
+        if (tryAdd(center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r)) added++
+      }
+    }
+
+    // ── 3. Lone wanderers: sparse random sightings across the wider ocean region
+    const loneTarget = 2 + Math.floor(Math.random() * 3)
+    let la = 0, loneAdded = 0
+    while (loneAdded < loneTarget && la++ < loneTarget * 40) {
+      const lng = bboxLngMin + Math.random() * (bboxLngMax - bboxLngMin)
+      const lat = bboxLatMin + Math.random() * (bboxLatMax - bboxLatMin)
+      if (tryAdd(lng, lat)) loneAdded++
     }
 
     return whales
@@ -316,9 +362,10 @@ export default function MapView({
     // Solve once for the direct marnet path, then derive offset variants.
     // Waypoint-based stitching produces identical paths due to marnet node snapping,
     // so we offset the base coordinates instead to guarantee visual separation.
-    const directCoords   = solveSeaSegment(start, end)
-    const suggestedCoords = taperedOffsetPath(directCoords, -0.8)
-    const ecoCoords       = taperedOffsetPath(directCoords, -1.6)
+    const directCoords    = solveSeaSegment(start, end)
+    const landPolys       = landPolygonsRef.current
+    const suggestedCoords = landAwareOffsetPath(directCoords, -0.8, landPolys)
+    const ecoCoords       = landAwareOffsetPath(directCoords, -1.6, landPolys)
 
     const routeCoords: [number, number][][] = [directCoords, suggestedCoords, ecoCoords]
 
