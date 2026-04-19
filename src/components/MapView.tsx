@@ -277,6 +277,13 @@ export default function MapView({
           message: `Acoustic halo intersects ${s.species} sighting (${s.confidence} confidence) — reduce speed to 10 kts or less`,
         })
     })
+    if (sanctuaryPolygonsRef.current.some(s => geometryEngine.intersects(halo, s))) {
+      alerts.push({
+        type: 'sanctuary',
+        species: '',
+        message: 'Noise halo overlaps a NOAA Marine Sanctuary — reduce speed to 10 kts',
+      })
+    }
     onAlert([...sanctuaryAlertsRef.current, ...alerts])
   }, [onAlert])
 
