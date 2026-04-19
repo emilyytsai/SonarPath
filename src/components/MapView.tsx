@@ -256,7 +256,8 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
       map,
       center: [-120.8, 35.8],
       zoom: 6,
-      ui: { components: ['zoom', 'compass'] },
+      background: { color: [109, 129, 152, 1] },
+      ui: { components: [] },
     })
 
     view.constraints = {
