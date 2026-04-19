@@ -63,8 +63,8 @@ export default function Sidebar({
       boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.08), 2px 0 20px rgba(0,0,0,0.1)',
     }}>
       {/* Header */}
-      <div className="pl-2 py-4" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <img src="/logo.svg" alt="SonarPath" style={{ height: '55px', width: '230px' }} />
+      <div className="pl-3 py-4" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <img src="/logo.svg" alt="SonarPath" style={{ height: '75px', width: '260px' }} />
       </div>
 
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">
@@ -108,7 +108,7 @@ export default function Sidebar({
         </div>
 
         {/* Noise footprint stats */}
-        <div className="rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
+        <div className="glow-border rounded-lg p-4 border-white" style={{ background: 'rgba(255,255,255,0.05)' }}>
           <p className="text-gray-200 text-xs uppercase tracking-widest mb-3">Noise Footprint</p>
           <div className="flex items-end gap-2">
             <span className="text-3xl font-mono text-white">{radiusNm.toFixed(2)}</span>
@@ -126,7 +126,7 @@ export default function Sidebar({
         </div>
 
         {/* Alert banner */}
-        <div className={`rounded-lg p-3 border text-xs ${severityBg}`}>
+        <div className={`glow-border rounded-lg p-3 border text-xs ${severityBg}`}>
           <p className="font-semibold text-white mb-1">
             {alerts.length === 0 ? '✓ All clear' : `⚠ ${alerts.length} intersection${alerts.length > 1 ? 's' : ''}`}
           </p>

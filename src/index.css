@@ -67,6 +67,7 @@ input[type='range']::-webkit-slider-thumb {
   background: #00bfff;
   cursor: pointer;
   margin-top: -5px;
+  transition: transform 0.15s ease;
 }
 
 input[type='range']::-moz-range-thumb {
@@ -88,4 +89,59 @@ input[type='range']::-webkit-slider-runnable-track {
     rgba(255,255,255,0.25) var(--val, 50%),
     rgba(255,255,255,0.25) 100%
   );
+}
+
+input[type='range']::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+  transition: transform 0.15s ease;
+}
+
+input[type='range']::-moz-range-thumb:hover {
+  transform: scale(1.3);
+  transition: transform 0.15s ease;
+}
+
+button {
+  transition: transform 0.15s ease;
+}
+
+button:hover {
+  transform: scale(1.03);
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+@keyframes rotateBorder {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.glow-border {
+  position: relative;
+}
+
+.glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    270deg,
+    rgba(0, 191, 255, 0),
+    rgba(0, 191, 255, 0.6),
+    rgba(147, 197, 160, 0),
+    rgba(0, 191, 255, 0.3),
+    rgba(0, 191, 255, 0)
+  );
+  background-size: 300% 300%;
+  animation: rotateBorder 5s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }

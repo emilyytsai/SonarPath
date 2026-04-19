@@ -49,7 +49,7 @@ export default function ReportModal({
 Generated: ${new Date().toISOString()}
 
 EXECUTIVE SUMMARY
-Vessel operating at ${shipSpeed} knots with acoustic halo radius of ${radiusNm.toFixed(2)} nautical miles. Route: ${activeRoute?.label ?? 'N/A'}.
+Vessel operating at ${shipSpeed} knots with noise footprint radius of ${radiusNm.toFixed(2)} nautical miles. Route: ${activeRoute?.label ?? 'N/A'}.
 
 ENVIRONMENTAL IMPACT
 - Active whale sighting alerts: ${alerts.length}
@@ -57,7 +57,7 @@ ENVIRONMENTAL IMPACT
 - Estimated CO2 savings: ${co2Saved} tons vs direct route
 
 REGULATORY COMPLIANCE
-Operating under IMO Resolution MEPC.1/Circ.674 guidelines for acoustic pollution reduction. Vessel speed and routing adjusted to minimize cetacean acoustic impact.
+Operating under IMO Resolution MEPC.1/Circ.674 guidelines for noise pollution reduction. Vessel speed and routing adjusted to minimize cetacean acoustic impact.
 
 RECOMMENDATIONS
 ${alerts.length > 0 ? '• Reduce speed to below 10 knots to decrease halo radius\n• Consider eco-route to avoid sighting zones' : '• Continue current routing — no immediate interventions required'}
@@ -89,9 +89,15 @@ ${alerts.length > 0 ? '• Reduce speed to below 10 knots to decrease halo radiu
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-gray-950 border border-gray-700 rounded-xl w-[680px] max-h-[80vh] flex flex-col shadow-2xl">
+      <div className="rounded-xl w-[680px] max-h-[80vh] flex flex-col" style={{
+        background: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: '0.5px solid rgba(255, 255, 255, 0.15)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 40px rgba(0,0,0,0.4)',
+      }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <div>
             <h2 className="text-white font-semibold text-sm uppercase tracking-widest">ESG Compliance Report</h2>
             <p className="text-gray-500 text-xs mt-0.5">
@@ -102,14 +108,14 @@ ${alerts.length > 0 ? '• Reduce speed to below 10 knots to decrease halo radiu
         </div>
 
         {/* Stats bar */}
-        <div className="grid grid-cols-4 gap-0 border-b border-gray-800">
+        <div className="grid grid-cols-4 gap-0 border-b border-white/10">
           {[
             { label: 'Halo Radius', value: `${radiusNm.toFixed(2)} nm` },
             { label: 'Alerts',      value: `${alerts.length}` },
             { label: 'CO₂ Saved',   value: `${co2Saved} t` },
             { label: 'Fuel Saved',  value: `$${fuelSaved.toLocaleString()}` },
           ].map(stat => (
-            <div key={stat.label} className="px-5 py-3 border-r last:border-r-0 border-gray-800 text-center">
+            <div key={stat.label} className="px-5 py-3 border-r last:border-r-0 border-white/10 text-center">
               <p className="text-lg font-mono text-cyan-400">{stat.value}</p>
               <p className="text-gray-500 text-xs">{stat.label}</p>
             </div>
@@ -128,7 +134,7 @@ ${alerts.length > 0 ? '• Reduce speed to below 10 knots to decrease halo radiu
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-6 py-4 border-t border-gray-800">
+        <div className="flex gap-3 px-6 py-4 border-t border-white/10">
           <button
             onClick={downloadPDF}
             disabled={loading}
@@ -138,7 +144,7 @@ ${alerts.length > 0 ? '• Reduce speed to below 10 knots to decrease halo radiu
           </button>
           <button
             onClick={onClose}
-            className="px-6 py-2.5 text-xs rounded border border-gray-700 text-gray-400 hover:border-gray-500 hover:text-white transition-colors uppercase tracking-widest"
+            className="px-6 py-2.5 text-xs rounded border border-white/10 text-gray-400 hover:border-gray-500 hover:text-white transition-colors uppercase tracking-widest"
           >
             Close
           </button>
