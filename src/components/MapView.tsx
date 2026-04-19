@@ -14,6 +14,8 @@ import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import TextSymbol from '@arcgis/core/symbols/TextSymbol'
 import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
+import SimpleRenderer from '@arcgis/core/renderers/SimpleRenderer'
+import LabelClass from '@arcgis/core/layers/support/LabelClass'
 import { seaRoute } from 'searoute-ts'
 import type { ShipType, WhaleSighting, RouteResult, IntersectionAlert } from '../types'
 import { getNoiseRadius, getHaloColor, getHaloSeverity, estimateTripCosts } from '../services/acoustics'
@@ -71,6 +73,12 @@ function landAwareOffsetPath(
     }
     return [lng, lat] as [number, number]
   })
+}
+
+function routeIntersectsSanctuaries(coords: [number, number][], sanctuaries: Polygon[]): boolean {
+  if (!sanctuaries.length) return false
+  const line = new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } })
+  return sanctuaries.some(s => geometryEngine.intersects(s, line))
 }
 
 // ── Route styles ──────────────────────────────────────────────────────────────
@@ -134,12 +142,15 @@ export default function MapView({
   const routeLayerRef     = useRef<GraphicsLayer | null>(null)
   const shipLayerRef      = useRef<GraphicsLayer | null>(null)
   const landLayerRef      = useRef<FeatureLayer | null>(null)
+  const noaaLayerRef      = useRef<FeatureLayer | null>(null)
   const pulseRef          = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Refs used across effects without triggering re-runs
   const corridorSightingsRef = useRef<WhaleSighting[]>([])
   const directPathRef        = useRef<[number, number][] | null>(null)
   const landPolygonsRef      = useRef<Polygon[]>([])
+  const sanctuaryPolygonsRef = useRef<Polygon[]>([])
+  const sanctuaryAlertsRef   = useRef<IntersectionAlert[]>([])
   const shipTypeRef          = useRef(shipType)
   const startPortRef         = useRef<[number, number] | null>(null)
   const endPortRef           = useRef<[number, number] | null>(null)
@@ -219,7 +230,7 @@ export default function MapView({
       if (geometryEngine.intersects(halo, sightPt))
         alerts.push({ type: 'whale', species: s.species, message: `Acoustic halo intersects ${s.species} sighting (${s.confidence} confidence)` })
     })
-    onAlert(alerts)
+    onAlert([...sanctuaryAlertsRef.current, ...alerts])
   }, [onAlert])
 
   // ── Water-only whale generation (async, queries land layer) ───────────────
@@ -277,6 +288,22 @@ export default function MapView({
         landPolygonsRef.current = landPolygons
       } catch (e) {
         console.warn('[SonarPath] land query failed — skipping land check:', e)
+      }
+    }
+
+    const noaaLayer = noaaLayerRef.current
+    if (noaaLayer) {
+      try {
+        const result = await noaaLayer.queryFeatures({
+          geometry: new Extent({ xmin: bboxLngMin, ymin: bboxLatMin, xmax: bboxLngMax, ymax: bboxLatMax, spatialReference: { wkid: 4326 } }),
+          spatialRelationship: 'intersects',
+          returnGeometry: true,
+          outFields: [],
+        })
+        sanctuaryPolygonsRef.current = result.features.map(f => f.geometry as Polygon)
+        console.log(`[SonarPath] queried ${sanctuaryPolygonsRef.current.length} sanctuary polygon(s)`)
+      } catch (e) {
+        console.warn('[SonarPath] NOAA sanctuary query failed:', e)
       }
     }
 
@@ -362,12 +389,35 @@ export default function MapView({
     // Solve once for the direct marnet path, then derive offset variants.
     // Waypoint-based stitching produces identical paths due to marnet node snapping,
     // so we offset the base coordinates instead to guarantee visual separation.
-    const directCoords    = solveSeaSegment(start, end)
-    const landPolys       = landPolygonsRef.current
-    const suggestedCoords = landAwareOffsetPath(directCoords, -0.8, landPolys)
-    const ecoCoords       = landAwareOffsetPath(directCoords, -1.6, landPolys)
+    const directCoords   = solveSeaSegment(start, end)
+    const landPolys      = landPolygonsRef.current
+    const sanctuaryPolys = sanctuaryPolygonsRef.current
+
+    // Try increasingly westward offsets until the route clears all sanctuaries.
+    const findAvoidingPath = (startOffset: number): [number, number][] => {
+      for (let o = startOffset; Math.abs(o) <= 4.0; o -= 0.4) {
+        const coords = landAwareOffsetPath(directCoords, o, landPolys)
+        if (!routeIntersectsSanctuaries(coords, sanctuaryPolys)) return coords
+      }
+      return landAwareOffsetPath(directCoords, startOffset, landPolys)
+    }
+
+    const suggestedCoords = findAvoidingPath(-0.8)
+    const ecoCoords       = findAvoidingPath(-1.6)
 
     const routeCoords: [number, number][][] = [directCoords, suggestedCoords, ecoCoords]
+
+    const newSanctuaryAlerts: IntersectionAlert[] = []
+    routeCoords.forEach((coords, idx) => {
+      if (routeIntersectsSanctuaries(coords, sanctuaryPolys)) {
+        newSanctuaryAlerts.push({
+          type: 'sanctuary',
+          species: '',
+          message: `${ROUTE_STYLES[idx].label} route passes through a NOAA Marine Sanctuary`,
+        })
+      }
+    })
+    sanctuaryAlertsRef.current = newSanctuaryAlerts
 
     const results: RouteResult[] = routeCoords.map((coords, idx) => {
       const style = ROUTE_STYLES[idx]
@@ -404,15 +454,38 @@ export default function MapView({
       outFields: [],
     })
 
+    const noaaLayer = new FeatureLayer({
+      url: 'https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/NMS_Boundaries_02032022/FeatureServer/0',
+      title: 'NOAA Marine Sanctuaries',
+      outFields: ['NMS_Name', 'NMS_Abbrv'],
+      renderer: new SimpleRenderer({
+        symbol: new SimpleFillSymbol({
+          color: [210, 60, 60, 0.15],
+          outline: new SimpleLineSymbol({ color: [200, 70, 70, 0.7], width: 1.5, style: 'solid' }),
+        }),
+      }),
+      labelingInfo: [new LabelClass({
+        labelExpressionInfo: { expression: '$feature.NMS_Name' },
+        symbol: new TextSymbol({
+          color: [220, 110, 110, 1],
+          font: { size: 9, family: 'monospace', weight: 'bold' },
+          haloColor: [10, 14, 26, 0.95],
+          haloSize: 2,
+        }),
+        minScale: 12000000,
+      })],
+    })
+
     haloLayerRef.current      = haloLayer
     sightingsLayerRef.current = sightLayer
     routeLayerRef.current     = routeLayer
     shipLayerRef.current      = shipLayer
     landLayerRef.current      = landLayer
+    noaaLayerRef.current      = noaaLayer
 
     const map = new EsriMap({
       basemap: 'oceans',
-      layers: [landLayer, overlayLayer, routeLayer, haloLayer, sightLayer, shipLayer],
+      layers: [landLayer, overlayLayer, noaaLayer, routeLayer, haloLayer, sightLayer, shipLayer],
     })
 
     const view = new MapViewArcGIS({
@@ -475,6 +548,7 @@ export default function MapView({
       haloLayerRef.current?.removeAll()
       if (pulseRef.current) { clearInterval(pulseRef.current); pulseRef.current = null }
       hasSolvedOnceRef.current = false
+      sanctuaryAlertsRef.current = []
       onAlert([])
       onRoutesReady([])
       return

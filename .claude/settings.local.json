@@ -6,7 +6,12 @@
       "Bash(npm run *)",
       "Bash(npm list *)",
       "Read(//c/c/Users/Samson Du/SonarPath/src/types/**)",
-      "Read(//c/c/Users/Samson Du/SonarPath/src/**)"
+      "Read(//c/c/Users/Samson Du/SonarPath/src/**)",
+      "WebFetch(domain:services1.arcgis.com)",
+      "WebFetch(domain:services2.arcgis.com)",
+      "WebFetch(domain:gis.noaa.gov)",
+      "WebSearch",
+      "WebFetch(domain:sites.google.com)"
     ]
   }
 }
