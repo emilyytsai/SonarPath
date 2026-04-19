@@ -24,47 +24,50 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex h-screen bg-[#0a0e1a] text-white overflow-hidden">
-      <Sidebar
-        shipSpeed={shipSpeed}
-        shipType={shipType}
-        onSpeedChange={setShipSpeed}
-        onShipTypeChange={setShipType}
-        alerts={alerts}
-        sightings={sightings}
-        onOpenReport={() => setShowReport(true)}
-      />
+    <div className="relative w-screen h-screen overflow-hidden">
+      {/* Map fills entire screen */}
+      <div className="absolute inset-0">
+        <MapView
+          shipSpeed={shipSpeed}
+          shipType={shipType}
+          sightings={sightings}
+          onAlert={setAlerts}
+          onRoutesReady={setRoutes}
+        />
+      </div>
 
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Alert ticker */}
-        {alerts.length > 0 && (
-          <div className="shrink-0 bg-red-950/80 border-b border-red-700/50 px-4 py-2 flex items-center gap-3">
-            <span className="text-red-400 text-xs font-bold uppercase tracking-widest animate-pulse">⚠ Alert</span>
-            <span className="text-red-300 text-xs">{alerts[0].message}</span>
-            {alerts.length > 1 && (
-              <span className="text-red-500 text-xs">+{alerts.length - 1} more</span>
-            )}
-          </div>
-        )}
-
-        {loadError && (
-          <div className="shrink-0 bg-yellow-950/80 border-b border-yellow-700/50 px-4 py-2 text-yellow-300 text-xs">
-            ⚠ Could not load sightings data: {loadError}
-          </div>
-        )}
-
-        {/* Map */}
-        <div className="flex-1 min-h-0">
-          <MapView
-            shipSpeed={shipSpeed}
-            shipType={shipType}
-            sightings={sightings}
-            onAlert={setAlerts}
-            onRoutesReady={setRoutes}
-          />
+      {/* Alert ticker */}
+      {alerts.length > 0 && (
+        <div className="absolute top-0 left-72 right-0 z-20 bg-red-950/60 backdrop-blur-md border-b border-red-700/40 px-4 py-2 flex items-center gap-3">
+          <span className="text-red-400 text-xs font-bold uppercase tracking-widest animate-pulse">⚠ Alert</span>
+          <span className="text-red-300 text-xs">{alerts[0].message}</span>
+          {alerts.length > 1 && (
+            <span className="text-red-500 text-xs">+{alerts.length - 1} more</span>
+          )}
         </div>
+      )}
 
-        {/* Route comparison panel */}
+      {loadError && (
+        <div className="absolute top-0 left-72 right-0 z-20 bg-yellow-950/60 backdrop-blur-md border-b border-yellow-700/40 px-4 py-2 text-yellow-300 text-xs">
+          ⚠ Could not load sightings data: {loadError}
+        </div>
+      )}
+
+      {/* Glass sidebar */}
+      <div className="absolute top-0 left-0 bottom-0 z-10 w-72">
+        <Sidebar
+          shipSpeed={shipSpeed}
+          shipType={shipType}
+          onSpeedChange={setShipSpeed}
+          onShipTypeChange={setShipType}
+          alerts={alerts}
+          sightings={sightings}
+          onOpenReport={() => setShowReport(true)}
+        />
+      </div>
+
+      {/* Glass route panel */}
+      <div className="absolute bottom-0 left-72 right-0 z-10">
         <RoutePanel
           routes={routes}
           selected={selectedRoute}

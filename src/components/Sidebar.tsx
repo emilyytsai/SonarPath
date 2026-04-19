@@ -50,15 +50,21 @@ export default function Sidebar({
     }
   }
 
-  const severityBg = alerts.length === 0 ? 'bg-emerald-900/40 border-emerald-500/40'
-    : alerts.length <= 2              ? 'bg-yellow-900/40 border-yellow-500/40'
-    :                                   'bg-red-900/40 border-red-500/40'
+  const severityBg = alerts.length === 0 ? 'border-emerald-500/40 bg-emerald-500/10'
+    : alerts.length <= 2              ? 'border-yellow-500/40 bg-yellow-500/10'
+    :                                   'border-red-500/40 bg-red-500/10'
 
   return (
-    <aside className="w-72 shrink-0 bg-gray-950 border-r border-gray-800 flex flex-col h-full overflow-y-auto">
+    <aside className="w-72 shrink-0 flex flex-col h-full overflow-y-auto" style={{
+      background: 'rgba(255, 255, 255, 0.05)',
+      backdropFilter: 'blur(24px)',
+      WebkitBackdropFilter: 'blur(24px)',
+      borderRight: '0.5px solid rgba(255, 255, 255, 0.15)',
+      boxShadow: 'inset 1px 0 0 rgba(255,255,255,0.08), 2px 0 20px rgba(0,0,0,0.1)',
+    }}>
       {/* Header */}
-      <div className="py-4 border-b border-gray-800">
-       <img src="/src/assets/logo.svg" alt="SonarPath" style={{ height: '55px', width: '230px' }} />
+      <div className="pl-2 py-4" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <img src="/logo.svg" alt="SonarPath" style={{ height: '55px', width: '230px' }} />
       </div>
 
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">
@@ -73,7 +79,7 @@ export default function Sidebar({
                 className={`py-2 text-xs rounded border transition-all ${
                   shipType === t
                     ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300'
-                    : 'border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300'
+                    : 'border-white/10 text-gray-500 hover:border-white/20 hover:text-gray-300'
                 }`}
               >
                 {SHIP_LABELS[t].split(' ')[0]}
@@ -99,15 +105,15 @@ export default function Sidebar({
         </div>
 
         {/* Acoustic halo stats */}
-        <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+        <div className="rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
           <p className="text-gray-400 text-xs uppercase tracking-widest mb-3">Acoustic Halo</p>
           <div className="flex items-end gap-2">
             <span className="text-3xl font-mono text-white">{radiusNm.toFixed(2)}</span>
             <span className="text-gray-500 text-sm mb-1">nm radius</span>
           </div>
-          <div className="mt-2 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+          <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
             <div
-              className="h-full rounded-full transition-all duration-300"
+              className="h-full rounded-full transition-all duration-700"
               style={{
                 width: `${Math.min(100, (radiusNm / 15) * 100)}%`,
                 background: radiusNm < 4 ? '#00d2ff' : radiusNm < 8 ? '#f5a623' : '#ff3c3c',
@@ -128,11 +134,11 @@ export default function Sidebar({
 
         {/* Sightings count */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-gray-900 rounded p-3 border border-gray-800 text-center">
+          <div className="rounded p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
             <p className="text-2xl font-mono text-purple-400">{sightings.length}</p>
             <p className="text-gray-500 text-xs mt-0.5">Sightings</p>
           </div>
-          <div className="bg-gray-900 rounded p-3 border border-gray-800 text-center">
+          <div className="rounded p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
             <p className="text-2xl font-mono text-orange-400">{alerts.length}</p>
             <p className="text-gray-500 text-xs mt-0.5">Alerts</p>
           </div>
@@ -148,7 +154,7 @@ export default function Sidebar({
             {loadingAdvice ? 'Consulting AI…' : '◈ AI Captain Advice'}
           </button>
           {advice && (
-            <div className="mt-3 bg-gray-900 rounded p-3 border border-gray-800 text-xs text-gray-300 leading-relaxed">
+            <div className="mt-3 rounded p-3 text-xs text-gray-300 leading-relaxed" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
               {advice}
             </div>
           )}
