@@ -4,6 +4,7 @@ import MapView from './components/MapView'
 import Sidebar from './components/Sidebar'
 import RoutePanel from './components/RoutePanel'
 import ReportModal from './components/ReportModal'
+import LoadingScreen from './components/LoadingScreen'
 import type { ShipType, WhaleSighting, IntersectionAlert, RouteResult } from './types'
 import { fetchWhaleHabitats } from './services/noaa'
 
@@ -16,6 +17,7 @@ export default function App() {
   const [selectedRoute, setSelectedRoute] = useState<RouteResult['type'] | null>(null)
   const [showReport, setShowReport] = useState(false)
   const [loadError, setLoadError]   = useState<string | null>(null)
+  const [showIntro, setShowIntro]   = useState(true)
 
   useEffect(() => {
     fetchWhaleHabitats()
@@ -25,6 +27,11 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
+      {/* Loading screen */}
+      {showIntro && (
+        <LoadingScreen onComplete={() => setShowIntro(false)} />
+      )}
+
       {/* Map fills entire screen */}
       <div className="absolute inset-0">
         <MapView
