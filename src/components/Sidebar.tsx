@@ -57,12 +57,8 @@ export default function Sidebar({
   return (
     <aside className="w-72 shrink-0 bg-gray-950 border-r border-gray-800 flex flex-col h-full overflow-y-auto">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <span className="text-cyan-400 text-lg">◈</span>
-          <h1 className="text-white font-semibold tracking-widest text-sm uppercase">SonarPath</h1>
-        </div>
-        <p className="text-gray-500 text-xs mt-0.5">Acoustic Navigation System</p>
+      <div className="py-4 border-b border-gray-800">
+       <img src="/src/assets/logo.svg" alt="SonarPath" style={{ height: '55px', width: '230px' }} />
       </div>
 
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">
