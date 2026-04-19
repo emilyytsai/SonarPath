@@ -64,7 +64,7 @@ export default function Sidebar({
     }}>
       {/* Header */}
       <div className="pl-3 py-4" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <img src="/logo.svg" alt="SonarPath" style={{ height: '75px', width: '260px' }} />
+        <img src="/logo.svg" alt="SonarPath" style={{ height: '70px', width: '250px' }} />
       </div>
 
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">

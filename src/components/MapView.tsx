@@ -350,7 +350,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     overlayLayer.add(new Graphic({
       geometry: worldExtent,
       symbol: new SimpleFillSymbol({
-        color: [8, 8, 23, 0.55],
+        color: [8, 8, 23, 0.70],
         outline: { width: 0 }
       })
     }))

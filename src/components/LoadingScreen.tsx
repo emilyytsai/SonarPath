@@ -65,8 +65,8 @@ export default function LoadingScreen({ onComplete }: LoadingScreenProps) {
         <svg width="100%" height="100%" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
           <defs>
             <radialGradient id="oceanGlow" cx="50%" cy="60%" r="60%">
-                <stop offset="0%" stopColor="#3a4253" />
-                <stop offset="100%" stopColor="#5d6386" />
+                <stop offset="0%" stopColor="#333b57" />
+                <stop offset="100%" stopColor="#1c2130" />
             </radialGradient>
           </defs>
           <rect width="1440" height="900" fill="url(#oceanGlow)" />
@@ -132,20 +132,20 @@ export default function LoadingScreen({ onComplete }: LoadingScreenProps) {
             const pos = Math.min(progress - w.offset, 110)
             if (pos < 0) return null
             return (
-              <div
-                key={w.id}
-                style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  left: `${Math.min(pos, 110)}%`,
-                  transform: 'translateX(-50%)',
-                  transition: 'left 0.03s linear',
-                  opacity: pos > 105 ? 0 : 1,
-                  animation: 'whaleBob 0.8s ease-in-out infinite',
-                  animationDelay: `${w.delay}s`,
-                }}
-                dangerouslySetInnerHTML={{ __html: whalesvg('#a78bfa') }}
-              />
+            <div
+              key={w.id}
+              style={{
+                position: 'absolute',
+                top: '-2px',
+                left: `${Math.min(pos, 110)}%`,
+                transform: 'translateX(-50%) scaleX(-1)',  // ← add scaleX(-1) here
+                transition: 'left 0.03s linear',
+                opacity: pos > 105 ? 0 : 1,
+                animation: 'whaleBob 0.8s ease-in-out infinite',
+                animationDelay: `${w.delay}s`,
+              }}
+              dangerouslySetInnerHTML={{ __html: whalesvg('#a78bfa') }}
+            />
             )
           })}
         </div>
@@ -153,8 +153,8 @@ export default function LoadingScreen({ onComplete }: LoadingScreenProps) {
 
       <style>{`
         @keyframes whaleBob {
-          0%, 100% { transform: translateX(-50%) translateY(0px) rotate(-2deg); }
-          50%       { transform: translateX(-50%) translateY(-4px) rotate(2deg); }
+          0%, 100% { transform: translateX(-50%) scaleX(-1) translateY(0px) rotate(-2deg); }
+          50%       { transform: translateX(-50%) scaleX(-1) translateY(-4px) rotate(2deg); }
         }
       `}</style>
     </div>
