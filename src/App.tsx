@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import RoutePanel from './components/RoutePanel'
 import ReportModal from './components/ReportModal'
 import LoadingScreen from './components/LoadingScreen'
+import UserNavigation from './components/UserNavigation'
 import type { ShipType, WhaleSighting, IntersectionAlert, RouteResult } from './types'
 import { fetchWhaleHabitats } from './services/noaa'
 
@@ -31,7 +32,15 @@ export default function App() {
     <div className="relative w-screen h-screen overflow-hidden">
       {/* Loading screen */}
       {showIntro && (
-        <LoadingScreen onComplete={() => setShowIntro(false)} />
+        <LoadingScreen onComplete={() => {
+          setShowIntro(false)
+          setShowWelcome(true)
+        }} />
+      )}
+
+      {/* User navigation tooltip */}
+      {showWelcome && (
+        <UserNavigation onDismiss={() => setShowWelcome(false)} />
       )}
 
       {/* Map fills entire screen */}
