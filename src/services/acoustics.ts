@@ -31,8 +31,9 @@ const FUEL_RATE: Record<ShipType, number> = { cargo: 0.50, tanker: 0.75, cruise:
 const FUEL_PRICE_USD_PER_TON = 620
 const CO2_PER_FUEL_TON = 3.17
 
-export function estimateTripCosts(distanceNm: number, shipType: ShipType) {
-  const fuelTons = distanceNm * FUEL_RATE[shipType]
+export function estimateTripCosts(distanceNm: number, shipType: ShipType, speedKnots = 14) {
+  const speedFactor = Math.pow(speedKnots / 14, 1.5)
+  const fuelTons = distanceNm * FUEL_RATE[shipType] * speedFactor
   return {
     fuelCostUSD: Math.round(fuelTons * FUEL_PRICE_USD_PER_TON),
     co2Tons: Math.round(fuelTons * CO2_PER_FUEL_TON * 10) / 10,

@@ -33,8 +33,11 @@ export interface RouteResult {
   distanceNm: number
   durationHrs: number
   fuelCostUSD: number
+  baselineFuelCostUSD: number
   co2Tons: number
   color: string
+  portFeeUSD: number
+  greenDiscount: number
 }
 
 export interface IntersectionAlert {

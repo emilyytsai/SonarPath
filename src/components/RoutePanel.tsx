@@ -1,9 +1,10 @@
-import type { RouteResult } from '../types'
+import type { RouteResult, IntersectionAlert } from '../types'
 
 interface RoutePanelProps {
   routes: RouteResult[]
   selected: RouteResult['type'] | null
   onSelect: (t: RouteResult['type']) => void
+  alerts: IntersectionAlert[]
 }
 
 const ICONS: Record<RouteResult['type'], string> = {
@@ -12,7 +13,7 @@ const ICONS: Record<RouteResult['type'], string> = {
   eco:       '♻',
 }
 
-export default function RoutePanel({ routes, selected, onSelect }: RoutePanelProps) {
+export default function RoutePanel({ routes, selected, onSelect, alerts }: RoutePanelProps) {
   if (routes.length === 0) {
     return (
       <div className="h-36 flex items-center justify-center" style={{
@@ -26,7 +27,8 @@ export default function RoutePanel({ routes, selected, onSelect }: RoutePanelPro
     )
   }
 
-  const directRoute = routes.find(r => r.type === 'direct')
+  const directRoute  = routes.find(r => r.type === 'direct')
+  const isCompliant  = alerts.length === 0
 
   return (
     <div style={{
@@ -40,9 +42,16 @@ export default function RoutePanel({ routes, selected, onSelect }: RoutePanelPro
       <p className="text-cyan-500 text-xs uppercase tracking-widest mb-3">Route Comparison</p>
       <div className="grid grid-cols-3 gap-3">
         {routes.map(r => {
-          const savings = directRoute && r.type !== 'direct'
-            ? { fuel: directRoute.fuelCostUSD - r.fuelCostUSD, co2: directRoute.co2Tons - r.co2Tons }
+          const co2Savings  = directRoute && r.type !== 'direct'
+            ? directRoute.co2Tons - r.co2Tons
             : null
+          const speedSavings = r.baselineFuelCostUSD - r.fuelCostUSD
+          const portFee      = isCompliant && r.greenDiscount > 0
+            ? Math.round(r.portFeeUSD * (1 - r.greenDiscount))
+            : r.portFeeUSD
+          const portSavings  = isCompliant && r.greenDiscount > 0
+            ? Math.round(r.portFeeUSD * r.greenDiscount)
+            : 0
 
           return (
             <button
@@ -65,18 +74,41 @@ export default function RoutePanel({ routes, selected, onSelect }: RoutePanelPro
                 <span className="text-gray-300 font-mono text-right">{r.durationHrs} h</span>
                 <span className="text-white">Fuel cost</span>
                 <span className="text-gray-300 font-mono text-right">${r.fuelCostUSD.toLocaleString()}</span>
+                <span className="text-white">Port fee</span>
+                <span className="font-mono text-right" style={{ color: portSavings > 0 ? '#34d399' : '#d1d5db' }}>
+                  ${portFee.toLocaleString()}
+                  {portSavings > 0 && <span className="text-emerald-400"> 🌿</span>}
+                </span>
                 <span className="text-white">CO2</span>
                 <span className="text-gray-300 font-mono text-right">{r.co2Tons} t</span>
               </div>
-              {savings && savings.co2 > 0 && (
-                <div className="mt-2 pt-2" style={{ borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
-                  <span className="text-emerald-400 text-xs">↓ {savings.co2} t CO2 saved</span>
-                </div>
-              )}
+
+              <div className="mt-2 pt-2 flex flex-col gap-0.5" style={{ borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
+                {co2Savings !== null && co2Savings > 0 && (
+                  <span className="text-emerald-400 text-xs">↓ {co2Savings} t CO2 saved</span>
+                )}
+                {speedSavings > 0 && (
+                  <span className="text-sky-400 text-xs">⚡ ${speedSavings.toLocaleString()} fuel saved (speed ↓)</span>
+                )}
+                {portSavings > 0 && (
+                  <span className="text-emerald-400 text-xs">🌿 ${portSavings.toLocaleString()} green port discount</span>
+                )}
+              </div>
             </button>
           )
         })}
       </div>
+
+      {isCompliant && routes.some(r => r.greenDiscount > 0) && (
+        <p className="text-emerald-500 text-xs mt-2 text-center">
+          ✓ Compliant — green port discount applied
+        </p>
+      )}
+      {!isCompliant && routes.some(r => r.greenDiscount > 0) && (
+        <p className="text-gray-500 text-xs mt-2 text-center">
+          Resolve all alerts to unlock green port discount
+        </p>
+      )}
     </div>
   )
 }

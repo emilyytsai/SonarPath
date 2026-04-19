@@ -53,6 +53,7 @@ export default function App() {
           onRoutesReady={setRoutes}
           startPortKey={startPortKey}
           endPortKey={endPortKey}
+          selectedRoute={selectedRoute}
         />
       </div>
 
@@ -104,6 +105,7 @@ export default function App() {
         routes={routes}
         selected={selectedRoute}
         onSelect={setSelectedRoute}
+        alerts={alerts}
       />
     </div>
 

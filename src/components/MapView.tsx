@@ -23,7 +23,6 @@ import { PORTS } from '../data/ports'
 
 // ── Sea routing helpers ───────────────────────────────────────────────────────
 
-// Attempt seaRoute with progressive westward nudges until a valid path is found.
 function solveSeaSegment(
   start: [number, number],
   end: [number, number],
@@ -37,7 +36,6 @@ function solveSeaSegment(
       )
       const coords = result?.geometry?.coordinates as [number, number][] | undefined
       if (coords && coords.length >= 2) {
-        // Pin exact port coordinates so endpoints don't drift to snapped nodes
         coords[0] = [...start]
         coords[coords.length - 1] = [...end]
         console.log(`[SonarPath] seaRoute succeeded with nudge=${n}, ${coords.length} pts`)
@@ -49,10 +47,6 @@ function solveSeaSegment(
   return [[...start], [...end]]
 }
 
-// Offset a path laterally (west = negative lngOffset) with a sine taper so
-// endpoints stay pinned and only the middle section bulges offshore.
-// Near land (e.g. Puget Sound), the offset is stepped down toward 0 so routes
-// converge to the direct path rather than crossing land.
 function landAwareOffsetPath(
   base: [number, number][],
   lngOffset: number,
@@ -81,11 +75,41 @@ function routeIntersectsSanctuaries(coords: [number, number][], sanctuaries: Pol
   return sanctuaries.some(s => geometryEngine.intersects(s, line))
 }
 
+// Returns the nearest point on a polyline path to (lng, lat).
+function nearestPointOnPath(coords: [number, number][], lng: number, lat: number): [number, number] {
+  let best: [number, number] = coords[0]
+  let bestDist = Infinity
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [x1, y1] = coords[i]
+    const [x2, y2] = coords[i + 1]
+    const dx = x2 - x1, dy = y2 - y1
+    const lenSq = dx * dx + dy * dy
+    const t = lenSq > 0 ? Math.max(0, Math.min(1, ((lng - x1) * dx + (lat - y1) * dy) / lenSq)) : 0
+    const nx = x1 + t * dx, ny = y1 + t * dy
+    const dist = (lng - nx) ** 2 + (lat - ny) ** 2
+    if (dist < bestDist) { bestDist = dist; best = [nx, ny] }
+  }
+  return best
+}
+
+function makeShipSvgUrl(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+    <path d="M16 4 L21 11 L21 25 L11 25 L11 11 Z" fill="#00d2ff" opacity="0.95"/>
+    <path d="M16 4 L11 11 L21 11 Z" fill="#0099cc" opacity="0.9"/>
+    <rect x="13" y="13" width="6" height="8" rx="1" fill="#005f8a" opacity="0.9"/>
+    <circle cx="16" cy="7" r="1.2" fill="white" opacity="0.85"/>
+    <path d="M11 25 L8 29 L24 29 L21 25 Z" fill="#0088bb" opacity="0.75"/>
+    <path d="M8 29 Q10 31 12 29" stroke="white" stroke-width="0.7" fill="none" opacity="0.4"/>
+    <path d="M20 29 Q22 31 24 29" stroke="white" stroke-width="0.7" fill="none" opacity="0.4"/>
+  </svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 // ── Route styles ──────────────────────────────────────────────────────────────
 const ROUTE_STYLES: RouteResult[] = [
-  { type: 'direct',    label: 'Direct',    distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, co2Tons: 0, color: '#4a9eed' },
-  { type: 'suggested', label: 'Suggested', distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, co2Tons: 0, color: '#f5a623' },
-  { type: 'eco',       label: 'Eco',       distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, co2Tons: 0, color: '#5cb85c' },
+  { type: 'direct',    label: 'Direct',    distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, baselineFuelCostUSD: 0, co2Tons: 0, color: '#4a9eed', portFeeUSD: 0, greenDiscount: 0 },
+  { type: 'suggested', label: 'Suggested', distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, baselineFuelCostUSD: 0, co2Tons: 0, color: '#f5a623', portFeeUSD: 0, greenDiscount: 0 },
+  { type: 'eco',       label: 'Eco',       distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, baselineFuelCostUSD: 0, co2Tons: 0, color: '#5cb85c', portFeeUSD: 0, greenDiscount: 0 },
 ]
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -127,38 +151,60 @@ interface MapViewProps {
   onRoutesReady: (routes: RouteResult[]) => void
   startPortKey: string
   endPortKey: string
+  selectedRoute: RouteResult['type'] | null
 }
 
 export default function MapView({
   shipSpeed, shipType, onAlert, onRoutesReady,
-  startPortKey, endPortKey,
+  startPortKey, endPortKey, selectedRoute,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const viewRef           = useRef<MapViewArcGIS | null>(null)
-  const haloLayerRef      = useRef<GraphicsLayer | null>(null)
-  const sightingsLayerRef = useRef<GraphicsLayer | null>(null)
-  const routeLayerRef     = useRef<GraphicsLayer | null>(null)
-  const shipLayerRef      = useRef<GraphicsLayer | null>(null)
-  const landLayerRef      = useRef<FeatureLayer | null>(null)
-  const noaaLayerRef      = useRef<FeatureLayer | null>(null)
-  const pulseRef          = useRef<ReturnType<typeof setInterval> | null>(null)
+  const viewRef             = useRef<MapViewArcGIS | null>(null)
+  const haloLayerRef        = useRef<GraphicsLayer | null>(null)
+  const sightingsLayerRef   = useRef<GraphicsLayer | null>(null)
+  const routeLayerRef       = useRef<GraphicsLayer | null>(null)
+  const shipLayerRef        = useRef<GraphicsLayer | null>(null)
+  const shipMoveLayerRef    = useRef<GraphicsLayer | null>(null)
+  const landLayerRef        = useRef<FeatureLayer | null>(null)
+  const noaaLayerRef        = useRef<FeatureLayer | null>(null)
+  const pulseRef            = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Refs used across effects without triggering re-runs
-  const corridorSightingsRef = useRef<WhaleSighting[]>([])
-  const landPolygonsRef      = useRef<Polygon[]>([])
-  const sanctuaryPolygonsRef = useRef<Polygon[]>([])
-  const sanctuaryAlertsRef   = useRef<IntersectionAlert[]>([])
-  const shipTypeRef          = useRef(shipType)
-  const startPortRef         = useRef<[number, number] | null>(null)
-  const endPortRef           = useRef<[number, number] | null>(null)
-  const hasSolvedOnceRef     = useRef(false)
+  const corridorSightingsRef  = useRef<WhaleSighting[]>([])
+  const landPolygonsRef       = useRef<Polygon[]>([])
+  const sanctuaryPolygonsRef  = useRef<Polygon[]>([])
+  const sanctuaryAlertsRef    = useRef<IntersectionAlert[]>([])
+  const shipTypeRef           = useRef(shipType)
+  const shipSpeedRef          = useRef(shipSpeed)
+  const selectedRouteRef      = useRef<RouteResult['type'] | null>(selectedRoute)
+  const endPortKeyRef         = useRef(endPortKey)
+  const startPortRef          = useRef<[number, number] | null>(null)
+  const endPortRef            = useRef<[number, number] | null>(null)
+  const hasSolvedOnceRef      = useRef(false)
+  const isDraggingShipRef     = useRef(false)
+  const shipPosRef            = useRef<[number, number] | null>(null)
 
-  // Keep shipType ref current every render
-  shipTypeRef.current = shipType
+  // Cached route coordinates — keyed by start/end/type to skip re-solving on speed changes
+  const routeCoordsRef = useRef<{
+    coords: Record<RouteResult['type'], [number, number][]>
+    startKey: string
+    endKey: string
+    typeKey: ShipType
+  } | null>(null)
+
+  // Stable function ref for use inside map drag closure
+  const updateShipPosRef = useRef<(pos: [number, number] | null) => void>(() => {})
+
+  // Keep refs current every render
+  shipTypeRef.current      = shipType
+  shipSpeedRef.current     = shipSpeed
+  selectedRouteRef.current = selectedRoute
+  endPortKeyRef.current    = endPortKey
   if (startPortKey) startPortRef.current = PORTS[startPortKey]?.coords ?? null
   if (endPortKey)   endPortRef.current   = PORTS[endPortKey]?.coords   ?? null
 
   const [corridorSightings, setCorridorSightings] = useState<WhaleSighting[]>([])
+  const [shipPos, setShipPos] = useState<[number, number] | null>(null)
 
   // ── Render whale sightings ────────────────────────────────────────────────
   const renderSightings = useCallback((layer: GraphicsLayer, data: WhaleSighting[]) => {
@@ -191,7 +237,7 @@ export default function MapView({
     speed: number,
     type: ShipType,
     data: WhaleSighting[],
-    shipPos: [number, number],
+    shipPosition: [number, number],
   ) => {
     if (pulseRef.current) { clearInterval(pulseRef.current); pulseRef.current = null }
     layer.removeAll()
@@ -200,7 +246,7 @@ export default function MapView({
     const severity = getHaloSeverity(radiusNm)
     const [r, g, b, a] = getHaloColor(severity)
 
-    const shipPt = new Point({ longitude: shipPos[0], latitude: shipPos[1], spatialReference: { wkid: 4326 } })
+    const shipPt = new Point({ longitude: shipPosition[0], latitude: shipPosition[1], spatialReference: { wkid: 4326 } })
     const halo   = geometryEngine.geodesicBuffer(shipPt, radiusNm, 'nautical-miles') as Polygon
     if (!halo) return
 
@@ -225,7 +271,11 @@ export default function MapView({
     data.forEach(s => {
       const sightPt = new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } })
       if (geometryEngine.intersects(halo, sightPt))
-        alerts.push({ type: 'whale', species: s.species, message: `Acoustic halo intersects ${s.species} sighting (${s.confidence} confidence)` })
+        alerts.push({
+          type: 'whale',
+          species: s.species,
+          message: `Acoustic halo intersects ${s.species} sighting (${s.confidence} confidence) — reduce speed to 10 kts or less`,
+        })
     })
     onAlert([...sanctuaryAlertsRef.current, ...alerts])
   }, [onAlert])
@@ -237,7 +287,6 @@ export default function MapView({
   ): Promise<WhaleSighting[]> => {
     const routeCoords = solveSeaSegment(start, end)
 
-    // Build cumulative distances for uniform polyline sampling
     const segLengths: number[] = []
     let totalLen = 0
     for (let i = 1; i < routeCoords.length; i++) {
@@ -265,7 +314,6 @@ export default function MapView({
 
     const lngs = routeCoords.map(c => c[0])
     const lats  = routeCoords.map(c => c[1])
-    // Wide bbox: covers route offsets (1.6° west) and generous scatter in all directions
     const bboxLngMin = Math.min(...lngs) - 2.5
     const bboxLngMax = Math.max(...lngs) + 1.5
     const bboxLatMin = Math.min(...lats) - 1.5
@@ -310,7 +358,6 @@ export default function MapView({
       return landPolygons.some(poly => geometryEngine.intersects(poly, pt))
     }
 
-    // Weighted confidence: most sightings are low/medium certainty
     const weightedConfidence = (): WhaleSighting['confidence'] => {
       const r = Math.random()
       return r < 0.15 ? 'high' : r < 0.55 ? 'medium' : 'low'
@@ -332,7 +379,6 @@ export default function MapView({
       return false
     }
 
-    // ── 1. Corridor whales: near the direct path (eco route visually avoids these)
     const corridorTarget = 5 + Math.floor(Math.random() * 4)
     let a = 0
     while (whales.length < corridorTarget && a++ < corridorTarget * 20) {
@@ -340,10 +386,8 @@ export default function MapView({
       tryAdd(baseLng + (Math.random() - 0.5) * 0.6, baseLat + (Math.random() - 0.5) * 0.5)
     }
 
-    // ── 2. Hotspot clusters: simulate natural feeding/breeding aggregations
     const numClusters = 2 + Math.floor(Math.random() * 2)
     for (let c = 0; c < numClusters; c++) {
-      // Find an ocean point offset from the route to anchor the cluster
       let center: [number, number] | null = null
       for (let t = 0; t < 40 && !center; t++) {
         const [bLng, bLat] = sampleOnRoute()
@@ -361,7 +405,6 @@ export default function MapView({
       }
     }
 
-    // ── 3. Lone wanderers: sparse random sightings across the wider ocean region
     const loneTarget = 2 + Math.floor(Math.random() * 3)
     let la = 0, loneAdded = 0
     while (loneAdded < loneTarget && la++ < loneTarget * 40) {
@@ -373,63 +416,117 @@ export default function MapView({
     return whales
   }, [])
 
-  // ── Route solver using searoute-ts ────────────────────────────────────────
+  // ── Update moving ship graphic ────────────────────────────────────────────
+  const updateShipPos = useCallback((pos: [number, number] | null) => {
+    shipPosRef.current = pos
+    setShipPos(pos)
+    const layer = shipMoveLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    if (pos) {
+      layer.add(new Graphic({
+        geometry: new Point({ longitude: pos[0], latitude: pos[1], spatialReference: { wkid: 4326 } }),
+        symbol: new PictureMarkerSymbol({ url: makeShipSvgUrl(), width: 30, height: 30 }),
+      }))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  updateShipPosRef.current = updateShipPos
+
+  // ── Route solver ──────────────────────────────────────────────────────────
   const solveRoutes = useCallback((
     layer: GraphicsLayer,
     type: ShipType,
     start: [number, number],
     end: [number, number],
+    speed: number,
   ) => {
-    layer.removeAll()
+    const startKey   = `${start[0]},${start[1]}`
+    const endKey     = `${end[0]},${end[1]}`
+    const cached     = routeCoordsRef.current
+    const pathsMatch = cached?.startKey === startKey && cached?.endKey === endKey && cached?.typeKey === type
 
-    // Solve once for the direct marnet path, then derive offset variants.
-    // Waypoint-based stitching produces identical paths due to marnet node snapping,
-    // so we offset the base coordinates instead to guarantee visual separation.
-    const directCoords   = solveSeaSegment(start, end)
-    const landPolys      = landPolygonsRef.current
-    const sanctuaryPolys = sanctuaryPolygonsRef.current
+    let directCoords: [number, number][]
+    let suggestedCoords: [number, number][]
+    let ecoCoords: [number, number][]
 
-    // Try increasingly westward offsets until the route clears all sanctuaries.
-    const findAvoidingPath = (startOffset: number): [number, number][] => {
-      for (let o = startOffset; Math.abs(o) <= 4.0; o -= 0.4) {
-        const coords = landAwareOffsetPath(directCoords, o, landPolys)
-        if (!routeIntersectsSanctuaries(coords, sanctuaryPolys)) return coords
+    if (pathsMatch && cached) {
+      directCoords    = cached.coords.direct
+      suggestedCoords = cached.coords.suggested
+      ecoCoords       = cached.coords.eco
+    } else {
+      // Full path recompute
+      const landPolys      = landPolygonsRef.current
+      const sanctuaryPolys = sanctuaryPolygonsRef.current
+
+      directCoords = solveSeaSegment(start, end)
+
+      const findAvoidingPath = (startOffset: number): [number, number][] => {
+        for (let o = startOffset; Math.abs(o) <= 4.0; o -= 0.4) {
+          const coords = landAwareOffsetPath(directCoords, o, landPolys)
+          if (!routeIntersectsSanctuaries(coords, sanctuaryPolys)) return coords
+        }
+        return landAwareOffsetPath(directCoords, startOffset, landPolys)
       }
-      return landAwareOffsetPath(directCoords, startOffset, landPolys)
+
+      suggestedCoords = findAvoidingPath(-0.8)
+      ecoCoords       = findAvoidingPath(-1.6)
+
+      const allCoords: [number, number][][] = [directCoords, suggestedCoords, ecoCoords]
+
+      // Sanctuary alerts
+      const newSanctuaryAlerts: IntersectionAlert[] = []
+      allCoords.forEach((coords, idx) => {
+        if (routeIntersectsSanctuaries(coords, sanctuaryPolys)) {
+          newSanctuaryAlerts.push({
+            type: 'sanctuary',
+            species: '',
+            message: `${ROUTE_STYLES[idx].label} route passes through a NOAA Marine Sanctuary — reduce to 10 kts when transiting`,
+          })
+        }
+      })
+      sanctuaryAlertsRef.current = newSanctuaryAlerts
+
+      // Draw route graphics
+      layer.removeAll()
+      allCoords.forEach((coords, idx) => {
+        const style = ROUTE_STYLES[idx]
+        const [rgb0, rgb1, rgb2] = hexToRgb(style.color)
+        layer.add(new Graphic({
+          geometry: new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } }),
+          symbol: new SimpleLineSymbol({
+            color: [rgb0, rgb1, rgb2, 0.85],
+            width: idx === 2 ? 3 : 2.5,
+            style: idx === 0 ? 'solid' : idx === 1 ? 'short-dash' : 'dot',
+          }),
+        }))
+      })
+
+      routeCoordsRef.current = {
+        coords: { direct: directCoords, suggested: suggestedCoords, eco: ecoCoords },
+        startKey, endKey, typeKey: type,
+      }
     }
 
-    const suggestedCoords = findAvoidingPath(-0.8)
-    const ecoCoords       = findAvoidingPath(-1.6)
+    // Always recompute costs — speed may have changed without path change
+    const destPort      = PORTS[endPortKeyRef.current ?? '']
+    const portFeeUSD    = destPort?.portFeeUSD    ?? 0
+    const greenDiscount = destPort?.isGreen       ? 0.2 : 0
 
-    const routeCoords: [number, number][][] = [directCoords, suggestedCoords, ecoCoords]
-
-    const newSanctuaryAlerts: IntersectionAlert[] = []
-    routeCoords.forEach((coords, idx) => {
-      if (routeIntersectsSanctuaries(coords, sanctuaryPolys)) {
-        newSanctuaryAlerts.push({
-          type: 'sanctuary',
-          species: '',
-          message: `${ROUTE_STYLES[idx].label} route passes through a NOAA Marine Sanctuary`,
-        })
+    const allRouteCoords: [number, number][][] = [directCoords!, suggestedCoords!, ecoCoords!]
+    const results: RouteResult[] = allRouteCoords.map((coords, idx) => {
+      const style    = ROUTE_STYLES[idx]
+      const distNm   = polylineLength(coords)
+      const costs    = estimateTripCosts(distNm, type, speed)
+      const baseline = estimateTripCosts(distNm, type, 14)
+      return {
+        ...style,
+        distanceNm: distNm,
+        durationHrs: Math.round((distNm / speed) * 10) / 10,
+        ...costs,
+        baselineFuelCostUSD: baseline.fuelCostUSD,
+        portFeeUSD,
+        greenDiscount,
       }
-    })
-    sanctuaryAlertsRef.current = newSanctuaryAlerts
-
-    const results: RouteResult[] = routeCoords.map((coords, idx) => {
-      const style = ROUTE_STYLES[idx]
-      const [rgb0, rgb1, rgb2] = hexToRgb(style.color)
-      layer.add(new Graphic({
-        geometry: new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } }),
-        symbol: new SimpleLineSymbol({
-          color: [rgb0, rgb1, rgb2, 0.85],
-          width: idx === 2 ? 3 : 2.5,
-          style: idx === 0 ? 'solid' : idx === 1 ? 'short-dash' : 'dot',
-        }),
-      }))
-
-      const distNm = polylineLength(coords)
-      const costs  = estimateTripCosts(distNm, type)
-      return { ...style, distanceNm: distNm, durationHrs: Math.round((distNm / 14) * 10) / 10, ...costs }
     })
 
     onRoutesReady(results)
@@ -439,12 +536,13 @@ export default function MapView({
   useEffect(() => {
     if (!containerRef.current) return
 
-    const haloLayer    = new GraphicsLayer({ title: 'Acoustic Halo' })
-    const sightLayer   = new GraphicsLayer({ title: 'Whale Sightings' })
-    const routeLayer   = new GraphicsLayer({ title: 'Routes' })
-    const shipLayer    = new GraphicsLayer({ title: 'Vessel' })
-    const overlayLayer = new GraphicsLayer({ title: 'Shader' })
-    const landLayer    = new FeatureLayer({
+    const haloLayer      = new GraphicsLayer({ title: 'Acoustic Halo' })
+    const sightLayer     = new GraphicsLayer({ title: 'Whale Sightings' })
+    const routeLayer     = new GraphicsLayer({ title: 'Routes' })
+    const shipLayer      = new GraphicsLayer({ title: 'Vessel' })
+    const shipMoveLayer  = new GraphicsLayer({ title: 'Ship' })
+    const overlayLayer   = new GraphicsLayer({ title: 'Shader' })
+    const landLayer      = new FeatureLayer({
       url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Continents/FeatureServer/0',
       visible: false,
       outFields: [],
@@ -476,12 +574,13 @@ export default function MapView({
     sightingsLayerRef.current = sightLayer
     routeLayerRef.current     = routeLayer
     shipLayerRef.current      = shipLayer
+    shipMoveLayerRef.current  = shipMoveLayer
     landLayerRef.current      = landLayer
     noaaLayerRef.current      = noaaLayer
 
     const map = new EsriMap({
       basemap: 'oceans',
-      layers: [landLayer, overlayLayer, noaaLayer, routeLayer, haloLayer, sightLayer, shipLayer],
+      layers: [landLayer, overlayLayer, noaaLayer, routeLayer, haloLayer, sightLayer, shipLayer, shipMoveLayer],
     })
 
     const view = new MapViewArcGIS({
@@ -504,9 +603,41 @@ export default function MapView({
       symbol: new SimpleFillSymbol({ color: [8, 8, 23, 0.70], outline: { width: 0 } }),
     }))
 
+    // Ship drag — snap vessel to nearest point on selected route
+    const dragHandle = view.on('drag', event => {
+      const ship = shipPosRef.current
+
+      if (event.action === 'start') {
+        isDraggingShipRef.current = false
+        if (!ship) return
+        const screenPos = view.toScreen(new Point({ longitude: ship[0], latitude: ship[1], spatialReference: { wkid: 4326 } }))
+        if (!screenPos) return
+        const dist = Math.sqrt((event.x - screenPos.x) ** 2 + (event.y - screenPos.y) ** 2)
+        if (dist < 32) isDraggingShipRef.current = true
+      }
+
+      if (!isDraggingShipRef.current) return
+      event.stopPropagation()
+
+      if (event.action === 'update') {
+        const routeType = selectedRouteRef.current
+        const cached    = routeCoordsRef.current
+        if (!routeType || !cached) return
+        const routeCoords = cached.coords[routeType]
+        if (!routeCoords) return
+        const mapPt = view.toMap({ x: event.x, y: event.y })
+        if (!mapPt || mapPt.longitude == null || mapPt.latitude == null) return
+        const snapped = nearestPointOnPath(routeCoords, mapPt.longitude as number, mapPt.latitude as number)
+        updateShipPosRef.current(snapped)
+      }
+
+      if (event.action === 'end') isDraggingShipRef.current = false
+    })
+
     viewRef.current = view
     return () => {
       if (pulseRef.current) clearInterval(pulseRef.current)
+      dragHandle.remove()
       view.destroy()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -533,8 +664,6 @@ export default function MapView({
   }, [startPortKey, endPortKey])
 
   // ── EFFECT A: Port change → generate whales → solve routes ───────────────
-  // Ship type is intentionally read from a ref here so changing ship type
-  // does NOT retrigger this effect (and therefore does NOT regenerate whales).
   useEffect(() => {
     if (!startPortKey || !endPortKey) {
       setCorridorSightings([])
@@ -545,6 +674,8 @@ export default function MapView({
       if (pulseRef.current) { clearInterval(pulseRef.current); pulseRef.current = null }
       hasSolvedOnceRef.current = false
       sanctuaryAlertsRef.current = []
+      routeCoordsRef.current = null
+      updateShipPosRef.current(null)
       onAlert([])
       onRoutesReady([])
       return
@@ -560,7 +691,7 @@ export default function MapView({
       corridorSightingsRef.current = whales
       hasSolvedOnceRef.current = true
       if (routeLayerRef.current) {
-        solveRoutes(routeLayerRef.current, shipTypeRef.current, start, end)
+        solveRoutes(routeLayerRef.current, shipTypeRef.current, start, end, shipSpeedRef.current)
       }
     })
 
@@ -568,15 +699,25 @@ export default function MapView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startPortKey, endPortKey])
 
-  // ── EFFECT B: Ship type change → re-solve routes, no whale regeneration ───
+  // ── EFFECT B: Ship type change → re-solve routes ──────────────────────────
   useEffect(() => {
     if (!hasSolvedOnceRef.current) return
     const start = startPortRef.current
     const end   = endPortRef.current
     if (!start || !end || !routeLayerRef.current) return
-    solveRoutes(routeLayerRef.current, shipType, start, end)
+    solveRoutes(routeLayerRef.current, shipType, start, end, shipSpeedRef.current)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipType])
+
+  // ── EFFECT C: Speed change → refresh costs (paths unchanged) ─────────────
+  useEffect(() => {
+    if (!hasSolvedOnceRef.current) return
+    const start = startPortRef.current
+    const end   = endPortRef.current
+    if (!start || !end || !routeLayerRef.current) return
+    solveRoutes(routeLayerRef.current, shipTypeRef.current, start, end, shipSpeed)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipSpeed])
 
   // ── Re-render sightings when corridor whales update ───────────────────────
   useEffect(() => {
@@ -584,13 +725,24 @@ export default function MapView({
     renderSightings(sightingsLayerRef.current, corridorSightings)
   }, [corridorSightings, renderSightings])
 
-  // ── Halo at departure port — only when port is selected ───────────────────
+  // ── Initialize ship on selected route ─────────────────────────────────────
   useEffect(() => {
-    if (!haloLayerRef.current || !startPortKey) return
+    if (!selectedRoute || !startPortKey) {
+      updateShipPos(null)
+      return
+    }
     const start = PORTS[startPortKey]?.coords
     if (!start) return
-    updateHalo(haloLayerRef.current, shipSpeed, shipType, corridorSightings, start)
-  }, [shipSpeed, shipType, corridorSightings, startPortKey, updateHalo])
+    updateShipPos([...start] as [number, number])
+  }, [selectedRoute, startPortKey, updateShipPos])
+
+  // ── Halo follows ship position ────────────────────────────────────────────
+  useEffect(() => {
+    if (!haloLayerRef.current || !startPortKey) return
+    const pos = shipPos ?? PORTS[startPortKey]?.coords
+    if (!pos) return
+    updateHalo(haloLayerRef.current, shipSpeed, shipType, corridorSightings, pos)
+  }, [shipSpeed, shipType, corridorSightings, startPortKey, shipPos, updateHalo])
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 }
