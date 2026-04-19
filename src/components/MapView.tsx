@@ -164,28 +164,37 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     onAlert(alerts)
   }, [onAlert])
 
-  // ── Solve routes ──────────────────────────────────────────────────────────
+  // ── Solve routes via ArcGIS Route Service ────────────────────────────────
+  // All three calls are made to the route service.  With no API key in play
+  // the service returns 499 → IdentityManager.getCredential rejects silently
+  // → catch fires → FALLBACK_ROUTES supply the three distinct coastal paths.
+  //
+  // Route intent encoded in the API parameters (takes effect if the service
+  // ever becomes accessible):
+  //   Direct   : origin → destination, no barriers
+  //   Suggested: origin → offshore midpoint → destination (forces longer arc)
+  //   Eco      : origin → destination, pointBarriers at all whale sightings
   const solveRoutes = useCallback(async (layer: GraphicsLayer, data: WhaleSighting[], type: ShipType) => {
-    const originPt = new Point({ longitude: ORIGIN[0], latitude: ORIGIN[1], spatialReference: { wkid: 4326 } })
+    const originPt = new Point({ longitude: ORIGIN[0],      latitude: ORIGIN[1],      spatialReference: { wkid: 4326 } })
     const destPt   = new Point({ longitude: DESTINATION[0], latitude: DESTINATION[1], spatialReference: { wkid: 4326 } })
+    const midPt    = new Point({ longitude: -121.5,         latitude: 35.5,           spatialReference: { wkid: 4326 } })
 
-    const makeStops = () => {
-      const s1 = new Graphic({ geometry: originPt })
-      const s2 = new Graphic({ geometry: destPt })
-      return new FeatureSet({ features: [s1, s2] })
-    }
+    const makeStops = (...pts: Point[]) =>
+      new FeatureSet({ features: pts.map(p => new Graphic({ geometry: p })) })
 
-    const barrierGraphics = data.map(s =>
-      new Graphic({ geometry: new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } }) })
-    )
-    const barriers = new FeatureSet({ features: barrierGraphics })
+    const whaleBarriers = new FeatureSet({
+      features: data.map(s => new Graphic({
+        geometry: new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } }),
+      })),
+    })
 
     const routeDefs = [
-      { key: 'direct' as const,    params: new RouteParameters({ stops: makeStops(), returnRoutes: true, returnDirections: false }) },
-      { key: 'suggested' as const, params: new RouteParameters({ stops: makeStops(), returnRoutes: true, returnDirections: false }) },
-      { key: 'eco' as const,       params: new RouteParameters({ stops: makeStops(), pointBarriers: barriers, returnRoutes: true, returnDirections: false }) },
+      { key: 'direct'    as const, params: new RouteParameters({ stops: makeStops(originPt, destPt),          returnRoutes: true, returnDirections: false }) },
+      { key: 'suggested' as const, params: new RouteParameters({ stops: makeStops(originPt, midPt, destPt),   returnRoutes: true, returnDirections: false }) },
+      { key: 'eco'       as const, params: new RouteParameters({ stops: makeStops(originPt, destPt), pointBarriers: whaleBarriers, returnRoutes: true, returnDirections: false }) },
     ]
 
+    layer.removeAll()
     const results: RouteResult[] = []
 
     await Promise.allSettled(
@@ -196,20 +205,14 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
         try {
           const solved = await route.solve(ROUTE_SERVICE_URL, def.params)
           const rGeom = solved.routeResults[0]?.route?.geometry as Polyline | undefined
-          if (rGeom?.paths?.[0]) {
-            coords = rGeom.paths[0] as number[][]
-          } else {
-            coords = FALLBACK_ROUTES[def.key]
-          }
+          coords = (rGeom?.paths?.[0] as number[][] | undefined) ?? FALLBACK_ROUTES[def.key]
         } catch {
           coords = FALLBACK_ROUTES[def.key]
         }
 
         const [rgb0, rgb1, rgb2] = hexToRgb(style.color)
-        const polyline = new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } })
-
         layer.add(new Graphic({
-          geometry: polyline,
+          geometry: new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } }),
           symbol: new SimpleLineSymbol({
             color: [rgb0, rgb1, rgb2, 0.85],
             width: idx === 2 ? 3 : 2.5,
@@ -218,7 +221,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
         }))
 
         const distNm = polylineLength(coords)
-        const costs = estimateTripCosts(distNm, type)
+        const costs  = estimateTripCosts(distNm, type)
         results[idx] = {
           ...style,
           distanceNm: distNm,
@@ -330,7 +333,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     updateHalo(haloLayerRef.current, shipSpeed, shipType, sightings)
   }, [shipSpeed, shipType, sightings, updateHalo])
 
-  // ── Solve routes once sightings are loaded ────────────────────────────────
+  // ── Solve routes once sightings are loaded (eco route needs barrier data) ──
   useEffect(() => {
     if (!routeLayerRef.current || sightings.length === 0) return
     void solveRoutes(routeLayerRef.current, sightings, shipType)
