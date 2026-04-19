@@ -18,6 +18,8 @@ export default function App() {
   const [showReport, setShowReport] = useState(false)
   const [loadError, setLoadError]   = useState<string | null>(null)
   const [showIntro, setShowIntro]   = useState(true)
+  const [startPortKey, setStartPortKey] = useState('')
+  const [endPortKey,   setEndPortKey]   = useState('')
 
   useEffect(() => {
     fetchWhaleHabitats()
@@ -37,9 +39,10 @@ export default function App() {
         <MapView
           shipSpeed={shipSpeed}
           shipType={shipType}
-          sightings={sightings}
           onAlert={setAlerts}
           onRoutesReady={setRoutes}
+          startPortKey={startPortKey}
+          endPortKey={endPortKey}
         />
       </div>
 
@@ -70,6 +73,10 @@ export default function App() {
           alerts={alerts}
           sightings={sightings}
           onOpenReport={() => setShowReport(true)}
+          startPortKey={startPortKey}
+          endPortKey={endPortKey}
+          onStartPortChange={setStartPortKey}
+          onEndPortChange={setEndPortKey}
         />
       </div>
 
