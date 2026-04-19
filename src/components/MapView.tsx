@@ -6,6 +6,7 @@ import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polygon from '@arcgis/core/geometry/Polygon'
 import Polyline from '@arcgis/core/geometry/Polyline'
+import Extent from '@arcgis/core/geometry/Extent'
 import * as geometryEngine from '@arcgis/core/geometry/geometryEngine'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
@@ -179,19 +180,10 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     )
     const barriers = new FeatureSet({ features: barrierGraphics })
 
-    const routeDefs: Array<{ key: keyof typeof FALLBACK_ROUTES; params: RouteParameters }> = [
-      {
-        key: 'direct',
-        params: new RouteParameters({ stops: makeStops(), returnRoutes: true, returnDirections: false }),
-      },
-      {
-        key: 'suggested',
-        params: new RouteParameters({ stops: makeStops(), returnRoutes: true, returnDirections: false }),
-      },
-      {
-        key: 'eco',
-        params: new RouteParameters({ stops: makeStops(), pointBarriers: barriers, returnRoutes: true, returnDirections: false }),
-      },
+    const routeDefs = [
+      { key: 'direct' as const,    params: new RouteParameters({ stops: makeStops(), returnRoutes: true, returnDirections: false }) },
+      { key: 'suggested' as const, params: new RouteParameters({ stops: makeStops(), returnRoutes: true, returnDirections: false }) },
+      { key: 'eco' as const,       params: new RouteParameters({ stops: makeStops(), pointBarriers: barriers, returnRoutes: true, returnDirections: false }) },
     ]
 
     const results: RouteResult[] = []
@@ -216,8 +208,6 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
         const [rgb0, rgb1, rgb2] = hexToRgb(style.color)
         const polyline = new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } })
 
-        // Dash pattern: direct=solid, suggested=dashed, eco=dotted
-        const dashPattern = idx === 0 ? undefined : idx === 1 ? [8, 4] : [2, 4]
         layer.add(new Graphic({
           geometry: polyline,
           symbol: new SimpleLineSymbol({
@@ -226,7 +216,6 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
             style: idx === 0 ? 'solid' : idx === 1 ? 'short-dash' : 'dot',
           }),
         }))
-        void dashPattern
 
         const distNm = polylineLength(coords)
         const costs = estimateTripCosts(distNm, type)
@@ -246,19 +235,20 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
   useEffect(() => {
     if (!containerRef.current) return
 
-    const haloLayer     = new GraphicsLayer({ title: 'Acoustic Halo' })
-    const sightLayer    = new GraphicsLayer({ title: 'Whale Sightings' })
-    const routeLayer    = new GraphicsLayer({ title: 'Routes' })
-    const shipLayer     = new GraphicsLayer({ title: 'Vessel' })
+    const haloLayer   = new GraphicsLayer({ title: 'Acoustic Halo' })
+    const sightLayer  = new GraphicsLayer({ title: 'Whale Sightings' })
+    const routeLayer  = new GraphicsLayer({ title: 'Routes' })
+    const shipLayer   = new GraphicsLayer({ title: 'Vessel' })
+    const overlayLayer = new GraphicsLayer({ title: 'Shader' })
 
-    haloLayerRef.current     = haloLayer
+    haloLayerRef.current      = haloLayer
     sightingsLayerRef.current = sightLayer
-    routeLayerRef.current    = routeLayer
-    shipLayerRef.current     = shipLayer
+    routeLayerRef.current     = routeLayer
+    shipLayerRef.current      = shipLayer
 
     const map = new EsriMap({
-      basemap: 'dark-gray',
-      layers: [routeLayer, haloLayer, sightLayer, shipLayer],
+      basemap: 'oceans',
+      layers: [overlayLayer, routeLayer, haloLayer, sightLayer, shipLayer],
     })
 
     const view = new MapViewArcGIS({
@@ -266,9 +256,36 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
       map,
       center: [-120.8, 35.8],
       zoom: 6,
-      background: { color: [10, 14, 26, 1] },
       ui: { components: ['zoom', 'compass'] },
     })
+
+    view.constraints = {
+      minZoom: 3,
+      rotationEnabled: false,
+      geometry: new Extent({
+        xmin: -179,
+        ymin: -75,
+        xmax: 179,
+        ymax: 75,
+        spatialReference: { wkid: 4326 }
+      })
+    }
+
+    const worldExtent = new Extent({
+      xmin: -180,
+      ymin: -90,
+      xmax: 180,
+      ymax: 90,
+      spatialReference: { wkid: 4326 }
+    })
+
+    overlayLayer.add(new Graphic({
+      geometry: worldExtent,
+      symbol: new SimpleFillSymbol({
+        color: [8, 8, 23, 0.55],
+        outline: { width: 0 }
+      })
+    }))
 
     viewRef.current = view
 
@@ -318,5 +335,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     void solveRoutes(routeLayerRef.current, sightings, shipType)
   }, [sightings, shipType, solveRoutes])
 
-  return <div ref={containerRef} className="w-full h-full" />
+  return (
+    <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+  )
 }
