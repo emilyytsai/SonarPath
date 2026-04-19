@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ShipType, IntersectionAlert, WhaleSighting } from '../types'
 import { getNoiseRadius } from '../services/acoustics'
 import { generateCaptainAdvice } from '../services/gemini'
+import { PORTS } from '../data/ports'
 
 interface SidebarProps {
   shipSpeed: number
@@ -11,6 +12,10 @@ interface SidebarProps {
   alerts: IntersectionAlert[]
   sightings: WhaleSighting[]
   onOpenReport: () => void
+  startPortKey: string
+  endPortKey: string
+  onStartPortChange: (key: string) => void
+  onEndPortChange: (key: string) => void
 }
 
 const SHIP_LABELS: Record<ShipType, string> = {
@@ -22,6 +27,7 @@ const SHIP_LABELS: Record<ShipType, string> = {
 export default function Sidebar({
   shipSpeed, shipType, onSpeedChange, onShipTypeChange,
   alerts, sightings, onOpenReport,
+  startPortKey, endPortKey, onStartPortChange, onEndPortChange,
 }: SidebarProps) {
   const [advice, setAdvice] = useState<string>('')
   const [loadingAdvice, setLoadingAdvice] = useState(false)
@@ -68,6 +74,44 @@ export default function Sidebar({
       </div>
 
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">
+        {/* Port selection */}
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="block text-gray-200 text-xs uppercase tracking-widest mb-1.5">Departure Port</label>
+            <select
+              value={startPortKey}
+              onChange={e => onStartPortChange(e.target.value)}
+              className="w-full rounded border border-cyan-500/30 bg-white/5 text-gray-200 text-xs px-3 py-2 focus:outline-none focus:border-cyan-500/60"
+              style={{ backdropFilter: 'blur(6px)' }}
+            >
+              <option value="" style={{ background: '#0a0e1e' }}>— Select —</option>
+              {Object.entries(PORTS).map(([key, p]) => (
+                <option key={key} value={key} style={{ background: '#0a0e1e' }}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-gray-200 text-xs uppercase tracking-widest mb-1.5">Arrival Port</label>
+            <select
+              value={endPortKey}
+              onChange={e => onEndPortChange(e.target.value)}
+              className="w-full rounded border border-red-500/30 bg-white/5 text-gray-200 text-xs px-3 py-2 focus:outline-none focus:border-red-500/60"
+              style={{ backdropFilter: 'blur(6px)' }}
+            >
+              <option value="" style={{ background: '#0a0e1e' }}>— Select —</option>
+              {Object.entries(PORTS).map(([key, p]) => (
+                <option key={key} value={key} style={{ background: '#0a0e1e' }}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {(!startPortKey || !endPortKey) && (
+          <p className="text-xs text-gray-500 text-center italic">
+            Select both ports to generate routes and sightings.
+          </p>
+        )}
+
         {/* Ship type */}
         <div>
           <label className="block text-gray-200 text-xs uppercase tracking-widest mb-2">Ship Type</label>
@@ -105,6 +149,23 @@ export default function Sidebar({
           <div className="flex justify-between text-gray-400 text-xs mt-1">
             <span>3 kn</span><span>25 kn</span>
           </div>
+        </div>
+
+        {/* Sustainability slider (placeholder) */}
+        <div className="opacity-50">
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-gray-200 text-xs uppercase tracking-widest">Sustainability</label>
+            <span className="text-emerald-400 font-mono text-sm">–</span>
+          </div>
+          <input
+            type="range" min={0} max={100} step={1} defaultValue={50}
+            disabled
+            className="w-full"
+          />
+          <div className="flex justify-between text-gray-500 text-xs mt-1">
+            <span>Speed</span><span>Eco</span>
+          </div>
+          <p className="text-gray-500 text-xs mt-1">Coming soon — will weight route visibility</p>
         </div>
 
         {/* Noise footprint stats */}

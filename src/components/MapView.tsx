@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import EsriMap from '@arcgis/core/Map'
 import MapViewArcGIS from '@arcgis/core/views/MapView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
+import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polygon from '@arcgis/core/geometry/Polygon'
@@ -13,38 +14,56 @@ import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import TextSymbol from '@arcgis/core/symbols/TextSymbol'
 import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
-import * as route from '@arcgis/core/rest/route'
-import RouteParameters from '@arcgis/core/rest/support/RouteParameters'
-import FeatureSet from '@arcgis/core/rest/support/FeatureSet'
+import { seaRoute } from 'searoute-ts'
 import type { ShipType, WhaleSighting, RouteResult, IntersectionAlert } from '../types'
 import { getNoiseRadius, getHaloColor, getHaloSeverity, estimateTripCosts } from '../services/acoustics'
+import { PORTS } from '../data/ports'
 
-const ROUTE_SERVICE_URL =
-  'https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World'
+// ── Sea routing helpers ───────────────────────────────────────────────────────
 
-// SF Bay → LA Port
-const ORIGIN: [number, number] = [-122.4194, 37.8044]
-const DESTINATION: [number, number] = [-118.2174, 33.7546]
-
-// Fallback polylines if route service is unavailable
-const FALLBACK_ROUTES: Record<string, number[][]> = {
-  direct: [
-    [-122.42, 37.80], [-122.30, 37.20], [-122.10, 36.60],
-    [-121.80, 35.90], [-121.20, 35.20], [-120.50, 34.60],
-    [-119.60, 34.10], [-118.80, 33.90], [-118.22, 33.75],
-  ],
-  suggested: [
-    [-122.42, 37.80], [-122.60, 37.10], [-122.70, 36.40],
-    [-122.50, 35.70], [-121.90, 35.00], [-121.20, 34.40],
-    [-120.20, 33.95], [-119.20, 33.78], [-118.22, 33.75],
-  ],
-  eco: [
-    [-122.42, 37.80], [-123.10, 37.00], [-123.40, 36.20],
-    [-123.10, 35.40], [-122.40, 34.70], [-121.40, 34.10],
-    [-120.10, 33.85], [-118.90, 33.75], [-118.22, 33.75],
-  ],
+// Attempt seaRoute with progressive westward nudges until a valid path is found.
+function solveSeaSegment(
+  start: [number, number],
+  end: [number, number],
+): [number, number][] {
+  const nudges = [0, 0.1, 0.3, 0.5]
+  for (const n of nudges) {
+    try {
+      const result = seaRoute(
+        [start[0] - n, start[1]],
+        [end[0] - n, end[1]],
+      )
+      const coords = result?.geometry?.coordinates as [number, number][] | undefined
+      if (coords && coords.length >= 2) {
+        // Pin exact port coordinates so endpoints don't drift to snapped nodes
+        coords[0] = [...start]
+        coords[coords.length - 1] = [...end]
+        console.log(`[SonarPath] seaRoute succeeded with nudge=${n}, ${coords.length} pts`)
+        return coords
+      }
+    } catch { /* try next nudge */ }
+  }
+  console.warn('[SonarPath] seaRoute failed all nudges — straight-line fallback')
+  return [[...start], [...end]]
 }
 
+// Offset a path laterally (west = negative lngOffset) with a sine taper so
+// endpoints stay pinned and only the middle section bulges offshore.
+// This is used to derive distinct Suggested / Eco routes from the direct path
+// instead of fighting marnet node snapping with intermediate waypoints.
+function taperedOffsetPath(
+  base: [number, number][],
+  lngOffset: number,
+): [number, number][] {
+  const n = base.length
+  return base.map(([lng, lat], i) => {
+    const t = n > 1 ? i / (n - 1) : 0.5
+    const weight = Math.sin(t * Math.PI) // 0 at endpoints, 1 at midpoint
+    return [lng + lngOffset * weight, lat] as [number, number]
+  })
+}
+
+// ── Route styles ──────────────────────────────────────────────────────────────
 const ROUTE_STYLES: RouteResult[] = [
   { type: 'direct',    label: 'Direct',    distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, co2Tons: 0, color: '#4a9eed' },
   { type: 'suggested', label: 'Suggested', distanceNm: 0, durationHrs: 0, fuelCostUSD: 0, co2Tons: 0, color: '#f5a623' },
@@ -52,80 +71,88 @@ const ROUTE_STYLES: RouteResult[] = [
 ]
 
 function hexToRgb(hex: string): [number, number, number] {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return [r, g, b]
+  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
 }
 
 function polylineLength(coords: number[][]): number {
   let dist = 0
   for (let i = 1; i < coords.length; i++) {
-    const dx = (coords[i][0] - coords[i - 1][0]) * 85  // rough km per degree lng
+    const dx = (coords[i][0] - coords[i - 1][0]) * 85
     const dy = (coords[i][1] - coords[i - 1][1]) * 111
-    dist += Math.sqrt(dx * dx + dy * dy) * 0.539957 // km → nm
+    dist += Math.sqrt(dx * dx + dy * dy) * 0.539957
   }
   return Math.round(dist)
 }
 
-// Whale SVG icon sized by confidence
-const confidenceSizes: Record<string, number> = {
-  high:   30,
-  medium: 24,
-  low:    20,
-}
+// ── Whale helpers ─────────────────────────────────────────────────────────────
+const confidenceSizes: Record<string, number> = { high: 30, medium: 24, low: 20 }
+const WHALE_SPECIES = ['Humpback', 'Blue Whale', 'Gray Whale', 'Sperm Whale', 'Fin Whale', 'Orca']
+const CONFIDENCES: WhaleSighting['confidence'][] = ['high', 'medium', 'low']
+const NM_BUFFER = 50 / 60
 
 function makeWhaleSvgUrl(): string {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-      <ellipse cx="14" cy="17" rx="11" ry="7" fill="#a78bfa" opacity="0.9"/>
-      <ellipse cx="14" cy="17" rx="11" ry="7" fill="none" stroke="white" stroke-width="0.8" opacity="0.6"/>
-      <ellipse cx="10" cy="15" rx="2" ry="1.5" fill="white" opacity="0.3"/>
-      <circle cx="8" cy="15" r="1" fill="white" opacity="0.9"/>
-      <path d="M25 14 Q29 10 28 17 Q29 20 25 18 Z" fill="#a78bfa" opacity="0.9"/>
-      <path d="M25 14 Q29 10 28 17 Q29 20 25 18 Z" fill="none" stroke="white" stroke-width="0.8" opacity="0.6"/>
-      <ellipse cx="11" cy="22" rx="5" ry="2" fill="#7c3aed" opacity="0.4"/>
-    </svg>
-  `
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+    <ellipse cx="14" cy="17" rx="11" ry="7" fill="#a78bfa" opacity="0.9"/>
+    <ellipse cx="14" cy="17" rx="11" ry="7" fill="none" stroke="white" stroke-width="0.8" opacity="0.6"/>
+    <ellipse cx="10" cy="15" rx="2" ry="1.5" fill="white" opacity="0.3"/>
+    <circle cx="8" cy="15" r="1" fill="white" opacity="0.9"/>
+    <path d="M25 14 Q29 10 28 17 Q29 20 25 18 Z" fill="#a78bfa" opacity="0.9"/>
+    <path d="M25 14 Q29 10 28 17 Q29 20 25 18 Z" fill="none" stroke="white" stroke-width="0.8" opacity="0.6"/>
+    <ellipse cx="11" cy="22" rx="5" ry="2" fill="#7c3aed" opacity="0.4"/>
+  </svg>`
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
 interface MapViewProps {
   shipSpeed: number
   shipType: ShipType
-  sightings: WhaleSighting[]
   onAlert: (alerts: IntersectionAlert[]) => void
   onRoutesReady: (routes: RouteResult[]) => void
+  startPortKey: string
+  endPortKey: string
 }
 
-export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRoutesReady }: MapViewProps) {
+export default function MapView({
+  shipSpeed, shipType, onAlert, onRoutesReady,
+  startPortKey, endPortKey,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<MapViewArcGIS | null>(null)
-  const haloLayerRef = useRef<GraphicsLayer | null>(null)
+  const viewRef           = useRef<MapViewArcGIS | null>(null)
+  const haloLayerRef      = useRef<GraphicsLayer | null>(null)
   const sightingsLayerRef = useRef<GraphicsLayer | null>(null)
-  const routeLayerRef = useRef<GraphicsLayer | null>(null)
-  const shipLayerRef = useRef<GraphicsLayer | null>(null)
-  const pulseRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const routeLayerRef     = useRef<GraphicsLayer | null>(null)
+  const shipLayerRef      = useRef<GraphicsLayer | null>(null)
+  const landLayerRef      = useRef<FeatureLayer | null>(null)
+  const pulseRef          = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Refs used across effects without triggering re-runs
+  const corridorSightingsRef = useRef<WhaleSighting[]>([])
+  const directPathRef        = useRef<[number, number][] | null>(null)
+  const shipTypeRef          = useRef(shipType)
+  const startPortRef         = useRef<[number, number] | null>(null)
+  const endPortRef           = useRef<[number, number] | null>(null)
+  const hasSolvedOnceRef     = useRef(false)
+
+  // Keep shipType ref current every render
+  shipTypeRef.current = shipType
+  if (startPortKey) startPortRef.current = PORTS[startPortKey]?.coords ?? null
+  if (endPortKey)   endPortRef.current   = PORTS[endPortKey]?.coords   ?? null
+
+  const [corridorSightings, setCorridorSightings] = useState<WhaleSighting[]>([])
 
   // ── Render whale sightings ────────────────────────────────────────────────
   const renderSightings = useCallback((layer: GraphicsLayer, data: WhaleSighting[]) => {
     layer.removeAll()
     data.forEach(s => {
-      const pt = new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } })
-      const size = confidenceSizes[s.confidence] ?? 16
-
-      // Whale icon marker
       layer.add(new Graphic({
-        geometry: pt,
+        geometry: new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } }),
         symbol: new PictureMarkerSymbol({
           url: makeWhaleSvgUrl(),
-          width: size,
-          height: size,
+          width: confidenceSizes[s.confidence] ?? 16,
+          height: confidenceSizes[s.confidence] ?? 16,
         }),
-        attributes: { species: s.species, confidence: s.confidence },
       }))
-
-      // Species label
       layer.add(new Graphic({
         geometry: new Point({ longitude: s.lng, latitude: s.lat + 0.06, spatialReference: { wkid: 4326 } }),
         symbol: new TextSymbol({
@@ -139,163 +166,180 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     })
   }, [])
 
-  // ── Draw acoustic halo ─────────────────────────────────────────────────────
-  // geodesicBuffer is designed for geographic SR (4326) and accepts linear units directly.
-  const updateHalo = useCallback((layer: GraphicsLayer, speed: number, type: ShipType, data: WhaleSighting[]) => {
-    // Clear existing pulse interval before redrawing
-    if (pulseRef.current) {
-      clearInterval(pulseRef.current)
-      pulseRef.current = null
-    }
-
+  // ── Acoustic halo ─────────────────────────────────────────────────────────
+  const updateHalo = useCallback((
+    layer: GraphicsLayer,
+    speed: number,
+    type: ShipType,
+    data: WhaleSighting[],
+    shipPos: [number, number],
+  ) => {
+    if (pulseRef.current) { clearInterval(pulseRef.current); pulseRef.current = null }
     layer.removeAll()
+
     const radiusNm = getNoiseRadius(speed, type)
     const severity = getHaloSeverity(radiusNm)
     const [r, g, b, a] = getHaloColor(severity)
 
-    const shipPt = new Point({ longitude: ORIGIN[0], latitude: ORIGIN[1], spatialReference: { wkid: 4326 } })
-    const halo = geometryEngine.geodesicBuffer(shipPt, radiusNm, 'nautical-miles') as Polygon
+    const shipPt = new Point({ longitude: shipPos[0], latitude: shipPos[1], spatialReference: { wkid: 4326 } })
+    const halo   = geometryEngine.geodesicBuffer(shipPt, radiusNm, 'nautical-miles') as Polygon
     if (!halo) return
 
-    // Outer glow rings — indices 0, 1, 2
     for (let i = 3; i >= 1; i--) {
       const ring = geometryEngine.geodesicBuffer(shipPt, radiusNm * (1 + i * 0.2), 'nautical-miles') as Polygon
-      if (ring) {
-        layer.add(new Graphic({
-          geometry: ring,
-          symbol: new SimpleFillSymbol({
-            color: [r, g, b, a * 0.08 * i],
-            outline: { color: [r, g, b, 0.15], width: 0.5 },
-          }),
-        }))
-      }
+      if (ring) layer.add(new Graphic({ geometry: ring, symbol: new SimpleFillSymbol({ color: [r, g, b, a * 0.08 * i], outline: { color: [r, g, b, 0.15], width: 0.5 } }) }))
     }
+    layer.add(new Graphic({ geometry: halo, symbol: new SimpleFillSymbol({ color: [r, g, b, a], outline: { color: [r, g, b, 0.8], width: 2 } }) }))
+    layer.add(new Graphic({ geometry: halo, symbol: new SimpleFillSymbol({ color: [r, g, b, 0], outline: { color: [r, g, b, 1], width: 3 } }) }))
 
-    // Main halo — index 3
-    layer.add(new Graphic({
-      geometry: halo,
-      symbol: new SimpleFillSymbol({
-        color: [r, g, b, a],
-        outline: { color: [r, g, b, 0.8], width: 2 },
-      }),
-    }))
-
-    // Glowing border ring — index 4 (bright outline that pulses)
-    layer.add(new Graphic({
-      geometry: halo,
-      symbol: new SimpleFillSymbol({
-        color: [r, g, b, 0],
-        outline: { color: [r, g, b, 1], width: 3 },
-      }),
-    }))
-
-    // Pulse animation — oscillate opacity of outer rings and glowing border
     let phase = 0
     pulseRef.current = setInterval(() => {
       phase += 0.06
-      const pulse = (Math.sin(phase) + 1) / 2 // oscillates 0 → 1 → 0
-
-      const graphics = layer.graphics.toArray()
-
-      graphics.forEach((graphic, idx) => {
-        // Pulse outer glow rings (indices 0-2)
-        if (idx < 3) {
-          const baseAlpha = a * 0.08 * (3 - idx)
-          graphic.symbol = new SimpleFillSymbol({
-            color: [r, g, b, baseAlpha + pulse * 0.1],
-            outline: { color: [r, g, b, 0.1 + pulse * 0.2], width: 0.5 },
-          })
-        }
-
-        // Pulse the glowing border ring (index 4)
-        if (idx === 4) {
-          graphic.symbol = new SimpleFillSymbol({
-            color: [r, g, b, 0],
-            outline: { color: [r, g, b, 0.4 + pulse * 0.10], width: 2 + pulse * 2 },
-          })
-        }
+      const pulse = (Math.sin(phase) + 1) / 2
+      layer.graphics.toArray().forEach((graphic, idx) => {
+        if (idx < 3) graphic.symbol = new SimpleFillSymbol({ color: [r, g, b, a * 0.08 * (3 - idx) + pulse * 0.1], outline: { color: [r, g, b, 0.1 + pulse * 0.2], width: 0.5 } })
+        if (idx === 4) graphic.symbol = new SimpleFillSymbol({ color: [r, g, b, 0], outline: { color: [r, g, b, 0.4 + pulse * 0.1], width: 2 + pulse * 2 } })
       })
     }, 25)
 
-    // Intersection checks — halo and sighting points share the same SR (4326)
     const alerts: IntersectionAlert[] = []
     data.forEach(s => {
       const sightPt = new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } })
-      if (geometryEngine.intersects(halo, sightPt)) {
-        alerts.push({ type: 'whale' as const, species: s.species, message: `Acoustic halo intersects ${s.species} sighting (${s.confidence} confidence)` })
-      }
+      if (geometryEngine.intersects(halo, sightPt))
+        alerts.push({ type: 'whale', species: s.species, message: `Acoustic halo intersects ${s.species} sighting (${s.confidence} confidence)` })
     })
     onAlert(alerts)
   }, [onAlert])
 
-  // ── Solve routes via ArcGIS Route Service ────────────────────────────────
-  // All three calls are made to the route service. With no API key in play
-  // the service returns 499 → IdentityManager.getCredential rejects silently
-  // → catch fires → FALLBACK_ROUTES supply the three distinct coastal paths.
-  //
-  // Route intent encoded in the API parameters (takes effect if the service
-  // ever becomes accessible):
-  //   Direct   : origin → destination, no barriers
-  //   Suggested: origin → offshore midpoint → destination (forces longer arc)
-  //   Eco      : origin → destination, pointBarriers at all whale sightings
-  const solveRoutes = useCallback(async (layer: GraphicsLayer, data: WhaleSighting[], type: ShipType) => {
-    const originPt = new Point({ longitude: ORIGIN[0],      latitude: ORIGIN[1],      spatialReference: { wkid: 4326 } })
-    const destPt   = new Point({ longitude: DESTINATION[0], latitude: DESTINATION[1], spatialReference: { wkid: 4326 } })
-    const midPt    = new Point({ longitude: -121.5,         latitude: 35.5,           spatialReference: { wkid: 4326 } })
+  // ── Water-only whale generation (async, queries land layer) ───────────────
+  const generateWaterWhales = useCallback(async (
+    start: [number, number],
+    end: [number, number],
+  ): Promise<WhaleSighting[]> => {
+    // Distribute whales along the actual sea route so they span the full corridor
+    const routeCoords = solveSeaSegment(start, end)
 
-    const makeStops = (...pts: Point[]) =>
-      new FeatureSet({ features: pts.map(p => new Graphic({ geometry: p })) })
+    // Build cumulative segment lengths for uniform sampling along the polyline
+    const segLengths: number[] = []
+    let totalLen = 0
+    for (let i = 1; i < routeCoords.length; i++) {
+      const dx = routeCoords[i][0] - routeCoords[i - 1][0]
+      const dy = routeCoords[i][1] - routeCoords[i - 1][1]
+      const len = Math.sqrt(dx * dx + dy * dy)
+      segLengths.push(len)
+      totalLen += len
+    }
 
-    const whaleBarriers = new FeatureSet({
-      features: data.map(s => new Graphic({
-        geometry: new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } }),
-      })),
+    // Sample a random [lng, lat] uniformly along the polyline
+    const sampleOnRoute = (): [number, number] => {
+      let t = Math.random() * totalLen
+      for (let i = 0; i < segLengths.length; i++) {
+        if (t <= segLengths[i] || i === segLengths.length - 1) {
+          const frac = segLengths[i] > 0 ? t / segLengths[i] : 0
+          return [
+            routeCoords[i][0] + frac * (routeCoords[i + 1][0] - routeCoords[i][0]),
+            routeCoords[i][1] + frac * (routeCoords[i + 1][1] - routeCoords[i][1]),
+          ]
+        }
+        t -= segLengths[i]
+      }
+      return [...routeCoords[routeCoords.length - 1]] as [number, number]
+    }
+
+    // Scatter whales within ~0.25 deg of the direct path so they sit visually on it.
+    // The eco route is offset ~1.6 deg west, so it clearly avoids this corridor.
+    const SCATTER = 0.25
+
+    const lngs = routeCoords.map(c => c[0])
+    const lats  = routeCoords.map(c => c[1])
+    const lngMin = Math.min(...lngs) - SCATTER
+    const lngMax = Math.max(...lngs) + SCATTER
+    const latMin = Math.min(...lats) - SCATTER
+    const latMax = Math.max(...lats) + SCATTER
+
+    let landPolygons: Polygon[] = []
+    const landLayer = landLayerRef.current
+    if (landLayer) {
+      try {
+        const result = await landLayer.queryFeatures({
+          geometry: new Extent({ xmin: lngMin, ymin: latMin, xmax: lngMax, ymax: latMax, spatialReference: { wkid: 4326 } }),
+          spatialRelationship: 'intersects',
+          returnGeometry: true,
+          outFields: [],
+        })
+        landPolygons = result.features.map(f => f.geometry as Polygon)
+      } catch (e) {
+        console.warn('[SonarPath] land query failed — skipping land check:', e)
+      }
+    }
+
+    const isOnLand = (lng: number, lat: number): boolean => {
+      if (landPolygons.length === 0) return false
+      const pt = new Point({ longitude: lng, latitude: lat, spatialReference: { wkid: 4326 } })
+      return landPolygons.some(poly => geometryEngine.intersects(poly, pt))
+    }
+
+    const target = 10 + Math.floor(Math.random() * 6)
+    const today  = new Date().toISOString().split('T')[0]
+    const whales: WhaleSighting[] = []
+    let attempts = 0
+
+    while (whales.length < target && attempts < target * 15) {
+      attempts++
+      const [baseLng, baseLat] = sampleOnRoute()
+      const lng = baseLng + (Math.random() - 0.5) * SCATTER * 2
+      const lat = baseLat + (Math.random() - 0.5) * SCATTER * 2
+      if (!isOnLand(lng, lat)) {
+        whales.push({
+          id: `corridor-${Date.now()}-${whales.length}`,
+          species: WHALE_SPECIES[Math.floor(Math.random() * WHALE_SPECIES.length)],
+          lat, lng,
+          date: today,
+          confidence: CONFIDENCES[Math.floor(Math.random() * CONFIDENCES.length)],
+        })
+      }
+    }
+
+    return whales
+  }, [])
+
+  // ── Route solver using searoute-ts ────────────────────────────────────────
+  const solveRoutes = useCallback((
+    layer: GraphicsLayer,
+    whales: WhaleSighting[],
+    type: ShipType,
+    start: [number, number],
+    end: [number, number],
+  ) => {
+    layer.removeAll()
+
+    // Solve once for the direct marnet path, then derive offset variants.
+    // Waypoint-based stitching produces identical paths due to marnet node snapping,
+    // so we offset the base coordinates instead to guarantee visual separation.
+    const directCoords   = solveSeaSegment(start, end)
+    const suggestedCoords = taperedOffsetPath(directCoords, -0.8)
+    const ecoCoords       = taperedOffsetPath(directCoords, -1.6)
+
+    const routeCoords: [number, number][][] = [directCoords, suggestedCoords, ecoCoords]
+
+    const results: RouteResult[] = routeCoords.map((coords, idx) => {
+      const style = ROUTE_STYLES[idx]
+      const [rgb0, rgb1, rgb2] = hexToRgb(style.color)
+      layer.add(new Graphic({
+        geometry: new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } }),
+        symbol: new SimpleLineSymbol({
+          color: [rgb0, rgb1, rgb2, 0.85],
+          width: idx === 2 ? 3 : 2.5,
+          style: idx === 0 ? 'solid' : idx === 1 ? 'short-dash' : 'dot',
+        }),
+      }))
+
+      const distNm = polylineLength(coords)
+      const costs  = estimateTripCosts(distNm, type)
+      return { ...style, distanceNm: distNm, durationHrs: Math.round((distNm / 14) * 10) / 10, ...costs }
     })
 
-    const routeDefs = [
-      { key: 'direct'    as const, params: new RouteParameters({ stops: makeStops(originPt, destPt),          returnRoutes: true, returnDirections: false }) },
-      { key: 'suggested' as const, params: new RouteParameters({ stops: makeStops(originPt, midPt, destPt),   returnRoutes: true, returnDirections: false }) },
-      { key: 'eco'       as const, params: new RouteParameters({ stops: makeStops(originPt, destPt), pointBarriers: whaleBarriers, returnRoutes: true, returnDirections: false }) },
-    ]
-
-    layer.removeAll()
-    const results: RouteResult[] = []
-
-    await Promise.allSettled(
-      routeDefs.map(async (def, idx) => {
-        const style = ROUTE_STYLES[idx]
-        let coords: number[][]
-
-        try {
-          const solved = await route.solve(ROUTE_SERVICE_URL, def.params)
-          const rGeom = solved.routeResults[0]?.route?.geometry as Polyline | undefined
-          coords = (rGeom?.paths?.[0] as number[][] | undefined) ?? FALLBACK_ROUTES[def.key]
-        } catch {
-          coords = FALLBACK_ROUTES[def.key]
-        }
-
-        const [rgb0, rgb1, rgb2] = hexToRgb(style.color)
-        layer.add(new Graphic({
-          geometry: new Polyline({ paths: [coords], spatialReference: { wkid: 4326 } }),
-          symbol: new SimpleLineSymbol({
-            color: [rgb0, rgb1, rgb2, 0.85],
-            width: idx === 2 ? 3 : 2.5,
-            style: idx === 0 ? 'solid' : idx === 1 ? 'short-dash' : 'dot',
-          }),
-        }))
-
-        const distNm = polylineLength(coords)
-        const costs  = estimateTripCosts(distNm, type)
-        results[idx] = {
-          ...style,
-          distanceNm: distNm,
-          durationHrs: Math.round((distNm / 14) * 10) / 10,
-          ...costs,
-        }
-      })
-    )
-
-    onRoutesReady(results.filter(Boolean))
+    onRoutesReady(results)
   }, [onRoutesReady])
 
   // ── Map initialization ────────────────────────────────────────────────────
@@ -307,22 +351,28 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     const routeLayer   = new GraphicsLayer({ title: 'Routes' })
     const shipLayer    = new GraphicsLayer({ title: 'Vessel' })
     const overlayLayer = new GraphicsLayer({ title: 'Shader' })
+    const landLayer    = new FeatureLayer({
+      url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Continents/FeatureServer/0',
+      visible: false,
+      outFields: [],
+    })
 
     haloLayerRef.current      = haloLayer
     sightingsLayerRef.current = sightLayer
     routeLayerRef.current     = routeLayer
     shipLayerRef.current      = shipLayer
+    landLayerRef.current      = landLayer
 
     const map = new EsriMap({
       basemap: 'oceans',
-      layers: [overlayLayer, routeLayer, haloLayer, sightLayer, shipLayer],
+      layers: [landLayer, overlayLayer, routeLayer, haloLayer, sightLayer, shipLayer],
     })
 
     const view = new MapViewArcGIS({
       container: containerRef.current,
       map,
-      center: [-120.8, 35.8],
-      zoom: 6,
+      center: [-121, 40],
+      zoom: 5,
       background: { color: [109, 129, 152, 1] },
       ui: { components: [] },
     })
@@ -330,82 +380,100 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     view.constraints = {
       minZoom: 3,
       rotationEnabled: false,
-      geometry: new Extent({
-        xmin: -179,
-        ymin: -75,
-        xmax: 179,
-        ymax: 75,
-        spatialReference: { wkid: 4326 }
-      })
+      geometry: new Extent({ xmin: -179, ymin: -75, xmax: 179, ymax: 75, spatialReference: { wkid: 4326 } }),
     }
 
-    const worldExtent = new Extent({
-      xmin: -180,
-      ymin: -90,
-      xmax: 180,
-      ymax: 90,
-      spatialReference: { wkid: 4326 }
-    })
-
     overlayLayer.add(new Graphic({
-      geometry: worldExtent,
-      symbol: new SimpleFillSymbol({
-        color: [8, 8, 23, 0.70],
-        outline: { width: 0 }
-      })
+      geometry: new Extent({ xmin: -180, ymin: -90, xmax: 180, ymax: 90, spatialReference: { wkid: 4326 } }),
+      symbol: new SimpleFillSymbol({ color: [8, 8, 23, 0.55], outline: { width: 0 } }),
     }))
 
     viewRef.current = view
-
-    // Ship marker at origin
-    shipLayer.add(new Graphic({
-      geometry: new Point({ longitude: ORIGIN[0], latitude: ORIGIN[1], spatialReference: { wkid: 4326 } }),
-      symbol: new SimpleMarkerSymbol({
-        style: 'triangle',
-        color: [0, 210, 255, 1],
-        size: 14,
-        outline: { color: [255, 255, 255, 0.9], width: 1.5 },
-        angle: 180,
-      }),
-    }))
-
-    // Destination marker
-    shipLayer.add(new Graphic({
-      geometry: new Point({ longitude: DESTINATION[0], latitude: DESTINATION[1], spatialReference: { wkid: 4326 } }),
-      symbol: new SimpleMarkerSymbol({
-        style: 'circle',
-        color: [255, 80, 80, 1],
-        size: 12,
-        outline: { color: [255, 255, 255, 0.9], width: 1.5 },
-      }),
-    }))
-
     return () => {
-      // Clean up pulse interval and map view on unmount
       if (pulseRef.current) clearInterval(pulseRef.current)
       view.destroy()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Re-render sightings when data changes ─────────────────────────────────
+  // ── Port markers ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const layer = shipLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    if (!startPortKey || !endPortKey) return
+
+    const start = PORTS[startPortKey]?.coords
+    const end   = PORTS[endPortKey]?.coords
+    if (!start || !end) return
+
+    layer.add(new Graphic({
+      geometry: new Point({ longitude: start[0], latitude: start[1], spatialReference: { wkid: 4326 } }),
+      symbol: new SimpleMarkerSymbol({ style: 'triangle', color: [0, 210, 255, 1], size: 14, angle: 180, outline: { color: [255, 255, 255, 0.9], width: 1.5 } }),
+    }))
+    layer.add(new Graphic({
+      geometry: new Point({ longitude: end[0], latitude: end[1], spatialReference: { wkid: 4326 } }),
+      symbol: new SimpleMarkerSymbol({ style: 'circle', color: [255, 80, 80, 1], size: 12, outline: { color: [255, 255, 255, 0.9], width: 1.5 } }),
+    }))
+  }, [startPortKey, endPortKey])
+
+  // ── EFFECT A: Port change → generate whales → solve routes ───────────────
+  // Ship type is intentionally read from a ref here so changing ship type
+  // does NOT retrigger this effect (and therefore does NOT regenerate whales).
+  useEffect(() => {
+    if (!startPortKey || !endPortKey) {
+      setCorridorSightings([])
+      corridorSightingsRef.current = []
+      routeLayerRef.current?.removeAll()
+      sightingsLayerRef.current?.removeAll()
+      haloLayerRef.current?.removeAll()
+      if (pulseRef.current) { clearInterval(pulseRef.current); pulseRef.current = null }
+      hasSolvedOnceRef.current = false
+      onAlert([])
+      onRoutesReady([])
+      return
+    }
+
+    const start = PORTS[startPortKey].coords
+    const end   = PORTS[endPortKey].coords
+    let cancelled = false
+
+    void generateWaterWhales(start, end).then(whales => {
+      if (cancelled) return
+      setCorridorSightings(whales)
+      corridorSightingsRef.current = whales
+      hasSolvedOnceRef.current = true
+      if (routeLayerRef.current) {
+        solveRoutes(routeLayerRef.current, whales, shipTypeRef.current, start, end)
+      }
+    })
+
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startPortKey, endPortKey])
+
+  // ── EFFECT B: Ship type change → re-solve routes, no whale regeneration ───
+  useEffect(() => {
+    if (!hasSolvedOnceRef.current) return
+    const start = startPortRef.current
+    const end   = endPortRef.current
+    if (!start || !end || !routeLayerRef.current) return
+    solveRoutes(routeLayerRef.current, corridorSightingsRef.current, shipType, start, end)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipType])
+
+  // ── Re-render sightings when corridor whales update ───────────────────────
   useEffect(() => {
     if (!sightingsLayerRef.current) return
-    renderSightings(sightingsLayerRef.current, sightings)
-  }, [sightings, renderSightings])
+    renderSightings(sightingsLayerRef.current, corridorSightings)
+  }, [corridorSightings, renderSightings])
 
-  // ── Re-draw halo when speed / type / sightings change ────────────────────
+  // ── Halo at departure port — only when port is selected ───────────────────
   useEffect(() => {
-    if (!haloLayerRef.current) return
-    updateHalo(haloLayerRef.current, shipSpeed, shipType, sightings)
-  }, [shipSpeed, shipType, sightings, updateHalo])
+    if (!haloLayerRef.current || !startPortKey) return
+    const start = PORTS[startPortKey]?.coords
+    if (!start) return
+    updateHalo(haloLayerRef.current, shipSpeed, shipType, corridorSightings, start)
+  }, [shipSpeed, shipType, corridorSightings, startPortKey, updateHalo])
 
-  // ── Solve routes once sightings are loaded (eco route needs barrier data) ──
-  useEffect(() => {
-    if (!routeLayerRef.current || sightings.length === 0) return
-    void solveRoutes(routeLayerRef.current, sightings, shipType)
-  }, [sightings, shipType, solveRoutes])
-
-  return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-  )
+  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 }
