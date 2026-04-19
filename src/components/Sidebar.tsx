@@ -70,7 +70,7 @@ export default function Sidebar({
       <div className="flex flex-col gap-5 px-5 py-5 flex-1">
         {/* Ship type */}
         <div>
-          <label className="block text-gray-400 text-xs uppercase tracking-widest mb-2">Vessel Class</label>
+          <label className="block text-gray-200 text-xs uppercase tracking-widest mb-2">Ship Type</label>
           <div className="grid grid-cols-3 gap-1.5">
             {(['cargo', 'tanker', 'cruise'] as ShipType[]).map(t => (
               <button
@@ -79,7 +79,7 @@ export default function Sidebar({
                 className={`py-2 text-xs rounded border transition-all ${
                   shipType === t
                     ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300'
-                    : 'border-white/10 text-gray-500 hover:border-white/20 hover:text-gray-300'
+                    : 'border-white/10 text-gray-300 hover:border-white/20 hover:text-white'
                 }`}
               >
                 {SHIP_LABELS[t].split(' ')[0]}
@@ -91,25 +91,28 @@ export default function Sidebar({
         {/* Speed slider */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="text-gray-400 text-xs uppercase tracking-widest">Speed</label>
+            <label className="text-gray-200 text-xs uppercase tracking-widest">Speed</label>
             <span className="text-cyan-400 font-mono text-sm">{shipSpeed} kn</span>
           </div>
-          <input
-            type="range" min={3} max={25} step={1} value={shipSpeed}
-            onChange={e => onSpeedChange(Number(e.target.value))}
-            className="w-full accent-cyan-400"
-          />
-          <div className="flex justify-between text-gray-600 text-xs mt-1">
+        <input
+          type="range" min={3} max={25} step={1} value={shipSpeed}
+          onChange={e => onSpeedChange(Number(e.target.value))}
+          className="w-full"
+          style={{
+            '--val': `${((shipSpeed - 3) / (25 - 3)) * 100}%`
+          } as React.CSSProperties}
+        />
+          <div className="flex justify-between text-gray-400 text-xs mt-1">
             <span>3 kn</span><span>25 kn</span>
           </div>
         </div>
 
-        {/* Acoustic halo stats */}
+        {/* Noise footprint stats */}
         <div className="rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
-          <p className="text-gray-400 text-xs uppercase tracking-widest mb-3">Acoustic Halo</p>
+          <p className="text-gray-200 text-xs uppercase tracking-widest mb-3">Noise Footprint</p>
           <div className="flex items-end gap-2">
             <span className="text-3xl font-mono text-white">{radiusNm.toFixed(2)}</span>
-            <span className="text-gray-500 text-sm mb-1">nm radius</span>
+            <span className="text-gray-300 text-sm mb-1">nm radius</span>
           </div>
           <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
             <div
@@ -136,11 +139,11 @@ export default function Sidebar({
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
             <p className="text-2xl font-mono text-purple-400">{sightings.length}</p>
-            <p className="text-gray-500 text-xs mt-0.5">Sightings</p>
+            <p className="text-gray-200 text-xs mt-0.5">Sightings</p>
           </div>
           <div className="rounded p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
             <p className="text-2xl font-mono text-orange-400">{alerts.length}</p>
-            <p className="text-gray-500 text-xs mt-0.5">Alerts</p>
+            <p className="text-gray-200 text-xs mt-0.5">Alerts</p>
           </div>
         </div>
 

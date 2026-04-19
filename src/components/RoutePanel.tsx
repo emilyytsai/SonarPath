@@ -37,7 +37,7 @@ export default function RoutePanel({ routes, selected, onSelect }: RoutePanelPro
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 -4px 20px rgba(0,0,0,0.1)',
       padding: '12px 16px',
     }}>
-      <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">Route Comparison</p>
+      <p className="text-cyan-500 text-xs uppercase tracking-widest mb-3">Route Comparison</p>
       <div className="grid grid-cols-3 gap-3">
         {routes.map(r => {
           const savings = directRoute && r.type !== 'direct'
@@ -59,13 +59,13 @@ export default function RoutePanel({ routes, selected, onSelect }: RoutePanelPro
                 <span className="text-white text-xs font-semibold uppercase tracking-wider">{r.label}</span>
               </div>
               <div className="grid grid-cols-2 gap-y-1 text-xs">
-                <span className="text-gray-800">Distance</span>
+                <span className="text-white">Distance</span>
                 <span className="text-gray-300 font-mono text-right">{r.distanceNm} nm</span>
-                <span className="text-gray-800">Duration</span>
+                <span className="text-white">Duration</span>
                 <span className="text-gray-300 font-mono text-right">{r.durationHrs} h</span>
-                <span className="text-gray-800">Fuel cost</span>
+                <span className="text-white">Fuel cost</span>
                 <span className="text-gray-300 font-mono text-right">${r.fuelCostUSD.toLocaleString()}</span>
-                <span className="text-gray-800">CO2</span>
+                <span className="text-white">CO2</span>
                 <span className="text-gray-300 font-mono text-right">{r.co2Tons} t</span>
               </div>
               {savings && savings.co2 > 0 && (

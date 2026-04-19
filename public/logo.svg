@@ -33,6 +33,6 @@
     <circle class="ring3" cx="0" cy="0" r="6" fill="none" stroke="#00bfff" stroke-width="1"/>
     <circle cx="0" cy="0" r="2.5" fill="#00bfff" opacity="0.9"/>
     <line x1="0" y1="0" x2="15" y2="-9" stroke="#00bfff" stroke-width="1" opacity="0.5"/>
-    <text x="28" y="8" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400" fill="#00bfff" letter-spacing="4">SONAR<tspan fill="#00a86b" font-weight="200" dx="2">PATH</tspan></text>
+    <text x="28" y="8" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400" fill="#00bfff" letter-spacing="4">SONAR<tspan fill="#ffffff" font-weight="200" dx="2">PATH</tspan></text>
   </g>
 </svg>
