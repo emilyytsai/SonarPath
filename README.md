@@ -14,11 +14,10 @@ FullyHacks 2026
 ## Mapping & GIS
 - ArcGIS Maps SDK for JavaScript (@arcgis/core)
 - ArcGIS Location Platform (Routing & Basemaps)
-- ArcGIS Living Atlas
 
 ## AI
 - Google Gemini API (ESG report generation & captain advice)
-- Maritime Data
+- NOAA ArcGIS Feature Service
 - searoute-ts (maritime routing)
 
 ## APIs
