@@ -108,7 +108,7 @@ export default function Sidebar({
         </div>
 
         {/* Noise footprint stats */}
-        <div className="glow-border rounded-lg p-4 border-white" style={{ background: 'rgba(255,255,255,0.05)' }}>
+        <div className="glow-border rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.15)' }}>
           <p className="text-gray-200 text-xs uppercase tracking-widest mb-3">Noise Footprint</p>
           <div className="flex items-end gap-2">
             <span className="text-3xl font-mono text-white">{radiusNm.toFixed(2)}</span>
@@ -137,11 +137,12 @@ export default function Sidebar({
 
         {/* Sightings count */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
+          <div className="glow-border2 rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.15)' }}>
             <p className="text-2xl font-mono text-purple-400">{sightings.length}</p>
             <p className="text-gray-200 text-xs mt-0.5">Sightings</p>
           </div>
-          <div className="rounded p-3 text-center" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.1)' }}>
+        {/* Alert count */}
+          <div className="glow-border3 rounded-lg p-4" style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.15)' }}>
             <p className="text-2xl font-mono text-orange-400">{alerts.length}</p>
             <p className="text-gray-200 text-xs mt-0.5">Alerts</p>
           </div>

@@ -12,6 +12,7 @@ import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import TextSymbol from '@arcgis/core/symbols/TextSymbol'
+import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
 import * as route from '@arcgis/core/rest/route'
 import RouteParameters from '@arcgis/core/rest/support/RouteParameters'
 import FeatureSet from '@arcgis/core/rest/support/FeatureSet'
@@ -67,6 +68,28 @@ function polylineLength(coords: number[][]): number {
   return Math.round(dist)
 }
 
+// Whale SVG icon sized by confidence
+const confidenceSizes: Record<string, number> = {
+  high:   30,
+  medium: 24,
+  low:    20,
+}
+
+function makeWhaleSvgUrl(): string {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+      <ellipse cx="14" cy="17" rx="11" ry="7" fill="#a78bfa" opacity="0.9"/>
+      <ellipse cx="14" cy="17" rx="11" ry="7" fill="none" stroke="white" stroke-width="0.8" opacity="0.6"/>
+      <ellipse cx="10" cy="15" rx="2" ry="1.5" fill="white" opacity="0.3"/>
+      <circle cx="8" cy="15" r="1" fill="white" opacity="0.9"/>
+      <path d="M25 14 Q29 10 28 17 Q29 20 25 18 Z" fill="#a78bfa" opacity="0.9"/>
+      <path d="M25 14 Q29 10 28 17 Q29 20 25 18 Z" fill="none" stroke="white" stroke-width="0.8" opacity="0.6"/>
+      <ellipse cx="11" cy="22" rx="5" ry="2" fill="#7c3aed" opacity="0.4"/>
+    </svg>
+  `
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 interface MapViewProps {
   shipSpeed: number
   shipType: ShipType
@@ -82,28 +105,26 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
   const sightingsLayerRef = useRef<GraphicsLayer | null>(null)
   const routeLayerRef = useRef<GraphicsLayer | null>(null)
   const shipLayerRef = useRef<GraphicsLayer | null>(null)
+  const pulseRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Render whale sightings ────────────────────────────────────────────────
   const renderSightings = useCallback((layer: GraphicsLayer, data: WhaleSighting[]) => {
     layer.removeAll()
     data.forEach(s => {
-      const confidenceColor: Record<string, number[]> = {
-        high:   [180, 100, 255],
-        medium: [130, 70, 200],
-        low:    [90, 50, 150],
-      }
-      const col = confidenceColor[s.confidence] ?? [130, 70, 200]
       const pt = new Point({ longitude: s.lng, latitude: s.lat, spatialReference: { wkid: 4326 } })
+      const size = confidenceSizes[s.confidence] ?? 16
+
+      // Whale icon marker
       layer.add(new Graphic({
         geometry: pt,
-        symbol: new SimpleMarkerSymbol({
-          style: 'diamond',
-          color: [col[0], col[1], col[2], 0.9],
-          size: 10,
-          outline: { color: [255, 255, 255, 0.6], width: 1 },
+        symbol: new PictureMarkerSymbol({
+          url: makeWhaleSvgUrl(),
+          width: size,
+          height: size,
         }),
         attributes: { species: s.species, confidence: s.confidence },
       }))
+
       // Species label
       layer.add(new Graphic({
         geometry: new Point({ longitude: s.lng, latitude: s.lat + 0.06, spatialReference: { wkid: 4326 } }),
@@ -121,6 +142,12 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
   // ── Draw acoustic halo ─────────────────────────────────────────────────────
   // geodesicBuffer is designed for geographic SR (4326) and accepts linear units directly.
   const updateHalo = useCallback((layer: GraphicsLayer, speed: number, type: ShipType, data: WhaleSighting[]) => {
+    // Clear existing pulse interval before redrawing
+    if (pulseRef.current) {
+      clearInterval(pulseRef.current)
+      pulseRef.current = null
+    }
+
     layer.removeAll()
     const radiusNm = getNoiseRadius(speed, type)
     const severity = getHaloSeverity(radiusNm)
@@ -130,7 +157,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     const halo = geometryEngine.geodesicBuffer(shipPt, radiusNm, 'nautical-miles') as Polygon
     if (!halo) return
 
-    // Outer glow rings
+    // Outer glow rings — indices 0, 1, 2
     for (let i = 3; i >= 1; i--) {
       const ring = geometryEngine.geodesicBuffer(shipPt, radiusNm * (1 + i * 0.2), 'nautical-miles') as Polygon
       if (ring) {
@@ -144,7 +171,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
       }
     }
 
-    // Main halo
+    // Main halo — index 3
     layer.add(new Graphic({
       geometry: halo,
       symbol: new SimpleFillSymbol({
@@ -152,6 +179,43 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
         outline: { color: [r, g, b, 0.8], width: 2 },
       }),
     }))
+
+    // Glowing border ring — index 4 (bright outline that pulses)
+    layer.add(new Graphic({
+      geometry: halo,
+      symbol: new SimpleFillSymbol({
+        color: [r, g, b, 0],
+        outline: { color: [r, g, b, 1], width: 3 },
+      }),
+    }))
+
+    // Pulse animation — oscillate opacity of outer rings and glowing border
+    let phase = 0
+    pulseRef.current = setInterval(() => {
+      phase += 0.06
+      const pulse = (Math.sin(phase) + 1) / 2 // oscillates 0 → 1 → 0
+
+      const graphics = layer.graphics.toArray()
+
+      graphics.forEach((graphic, idx) => {
+        // Pulse outer glow rings (indices 0-2)
+        if (idx < 3) {
+          const baseAlpha = a * 0.08 * (3 - idx)
+          graphic.symbol = new SimpleFillSymbol({
+            color: [r, g, b, baseAlpha + pulse * 0.1],
+            outline: { color: [r, g, b, 0.1 + pulse * 0.2], width: 0.5 },
+          })
+        }
+
+        // Pulse the glowing border ring (index 4)
+        if (idx === 4) {
+          graphic.symbol = new SimpleFillSymbol({
+            color: [r, g, b, 0],
+            outline: { color: [r, g, b, 0.4 + pulse * 0.10], width: 2 + pulse * 2 },
+          })
+        }
+      })
+    }, 25)
 
     // Intersection checks — halo and sighting points share the same SR (4326)
     const alerts: IntersectionAlert[] = []
@@ -165,7 +229,7 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
   }, [onAlert])
 
   // ── Solve routes via ArcGIS Route Service ────────────────────────────────
-  // All three calls are made to the route service.  With no API key in play
+  // All three calls are made to the route service. With no API key in play
   // the service returns 499 → IdentityManager.getCredential rejects silently
   // → catch fires → FALLBACK_ROUTES supply the three distinct coastal paths.
   //
@@ -238,10 +302,10 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
   useEffect(() => {
     if (!containerRef.current) return
 
-    const haloLayer   = new GraphicsLayer({ title: 'Acoustic Halo' })
-    const sightLayer  = new GraphicsLayer({ title: 'Whale Sightings' })
-    const routeLayer  = new GraphicsLayer({ title: 'Routes' })
-    const shipLayer   = new GraphicsLayer({ title: 'Vessel' })
+    const haloLayer    = new GraphicsLayer({ title: 'Acoustic Halo' })
+    const sightLayer   = new GraphicsLayer({ title: 'Whale Sightings' })
+    const routeLayer   = new GraphicsLayer({ title: 'Routes' })
+    const shipLayer    = new GraphicsLayer({ title: 'Vessel' })
     const overlayLayer = new GraphicsLayer({ title: 'Shader' })
 
     haloLayerRef.current      = haloLayer
@@ -317,6 +381,8 @@ export default function MapView({ shipSpeed, shipType, sightings, onAlert, onRou
     }))
 
     return () => {
+      // Clean up pulse interval and map view on unmount
+      if (pulseRef.current) clearInterval(pulseRef.current)
       view.destroy()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

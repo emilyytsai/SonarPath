@@ -145,3 +145,57 @@ button:active {
   mask-composite: exclude;
   pointer-events: none;
 }
+
+.glow-border2 {
+  position: relative;
+}
+
+.glow-border2::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    270deg,
+    rgba(0, 191, 255, 0),
+    rgba(183, 0, 255, 0.9),
+    rgba(147, 197, 160, 0),
+    rgba(195, 0, 255, 0.6),
+    rgba(0, 191, 255, 0)
+  );
+  background-size: 300% 300%;
+  animation: rotateBorder 7s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.glow-border3 {
+  position: relative;
+}
+
+.glow-border3::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    270deg,
+    rgba(0, 191, 255, 0),
+    rgba(255, 123, 0, 0.9),
+    rgba(147, 197, 160, 0),
+    rgba(255, 136, 0, 0.6),
+    rgba(0, 191, 255, 0)
+  );
+  background-size: 300% 300%;
+  animation: rotateBorder 7s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}

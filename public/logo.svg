@@ -11,20 +11,36 @@
       50% { opacity: 0.65; transform: scale(1.06); }
       100% { opacity: 0.3; transform: scale(1); }
     }
-    .ring1 { 
+    @keyframes sonarGlow {
+      0% { filter: drop-shadow(0 0 1px rgba(0, 191, 255, 0.2)); }
+      50% { filter: drop-shadow(0 0 2px rgba(0, 191, 255, 0.5)) drop-shadow(0 0 3px rgba(0, 191, 255, 0.25)); }
+      100% { filter: drop-shadow(0 0 1px rgba(0, 191, 255, 0.2)); }
+    }
+    @keyframes pathGlow {
+      0% { filter: drop-shadow(0 0 1px rgba(0, 191, 255, 0.3)); }
+      50% { filter: drop-shadow(0 0 3px rgba(0, 191, 255, 0.9)) drop-shadow(0 0 5px rgba(0, 191, 255, 0.5)); }
+      100% { filter: drop-shadow(0 0 1px rgba(0, 191, 255, 0.3)); }
+    }
+    .ring1 {
       animation: sonarPulse 2.5s ease-in-out infinite;
       transform-box: fill-box;
       transform-origin: center;
     }
-    .ring2 { 
+    .ring2 {
       animation: sonarPulse2 2.5s ease-in-out infinite 0.4s;
       transform-box: fill-box;
       transform-origin: center;
     }
-    .ring3 { 
+    .ring3 {
       animation: sonarPulse2 2.5s ease-in-out infinite 0.8s;
       transform-box: fill-box;
       transform-origin: center;
+    }
+    .sonar-text {
+      animation: sonarGlow 3s ease-in-out infinite;
+    }
+    .path-text {
+      animation: pathGlow 3s ease-in-out infinite;
     }
   </style>
   <g transform="translate(25, 25)">
@@ -33,6 +49,8 @@
     <circle class="ring3" cx="0" cy="0" r="6" fill="none" stroke="#00bfff" stroke-width="1"/>
     <circle cx="0" cy="0" r="2.5" fill="#00bfff" opacity="0.9"/>
     <line x1="0" y1="0" x2="15" y2="-9" stroke="#00bfff" stroke-width="1" opacity="0.5"/>
-    <text x="28" y="8" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400" fill="#00bfff" letter-spacing="4">SONAR<tspan fill="#ffffff" font-weight="200" dx="2">PATH</tspan></text>
+    <text x="28" y="8" font-family="'Inter', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400" letter-spacing="4">
+      <tspan class="sonar-text" fill="#00bfff">SONAR</tspan><tspan class="path-text" fill="#ffffff" font-weight="200" dx="2">PATH</tspan>
+    </text>
   </g>
 </svg>
