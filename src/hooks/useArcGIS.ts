@@ -1,3 +1,7 @@
+import { useRef } from 'react'
+import type MapView from '@arcgis/core/views/MapView'
+
 export function useArcGIS() {
-  // ArcGIS map logic will go here RAAAAAAAAAAAAH
+  const viewRef = useRef<MapView | null>(null)
+  return { viewRef }
 }

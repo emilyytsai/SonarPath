@@ -1,0 +1,5 @@
+[
+  { "id": "V001", "name": "MV Pacific Star", "type": "cargo", "lat": 37.8044, "lng": -122.4194, "speedKnots": 14 },
+  { "id": "V002", "name": "MT Ocean Titan", "type": "tanker", "lat": 37.6, "lng": -122.3, "speedKnots": 11 },
+  { "id": "V003", "name": "SS Coastal Voyager", "type": "cruise", "lat": 37.9, "lng": -122.5, "speedKnots": 18 }
+]
