@@ -1,0 +1,12 @@
+[
+  { "id": "ws-001", "species": "Blue Whale", "lat": 36.52, "lng": -122.18, "date": "2024-03-15", "confidence": "high" },
+  { "id": "ws-002", "species": "Humpback Whale", "lat": 35.84, "lng": -121.76, "date": "2024-03-18", "confidence": "high" },
+  { "id": "ws-003", "species": "Gray Whale", "lat": 35.22, "lng": -120.91, "date": "2024-03-20", "confidence": "medium" },
+  { "id": "ws-004", "species": "Blue Whale", "lat": 34.71, "lng": -120.65, "date": "2024-03-22", "confidence": "high" },
+  { "id": "ws-005", "species": "Fin Whale", "lat": 34.18, "lng": -119.84, "date": "2024-03-25", "confidence": "medium" },
+  { "id": "ws-006", "species": "Humpback Whale", "lat": 33.95, "lng": -119.42, "date": "2024-03-28", "confidence": "high" },
+  { "id": "ws-007", "species": "Gray Whale", "lat": 37.12, "lng": -122.58, "date": "2024-04-01", "confidence": "low" },
+  { "id": "ws-008", "species": "Blue Whale", "lat": 36.88, "lng": -122.44, "date": "2024-04-03", "confidence": "high" },
+  { "id": "ws-009", "species": "Sperm Whale", "lat": 35.63, "lng": -121.55, "date": "2024-04-05", "confidence": "medium" },
+  { "id": "ws-010", "species": "Minke Whale", "lat": 34.55, "lng": -120.33, "date": "2024-04-07", "confidence": "low" }
+]
