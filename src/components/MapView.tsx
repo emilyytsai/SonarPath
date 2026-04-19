@@ -105,8 +105,6 @@ function polylineLength(coords: number[][]): number {
 // ── Whale helpers ─────────────────────────────────────────────────────────────
 const confidenceSizes: Record<string, number> = { high: 30, medium: 24, low: 20 }
 const WHALE_SPECIES = ['Humpback', 'Blue Whale', 'Gray Whale', 'Sperm Whale', 'Fin Whale', 'Orca']
-const CONFIDENCES: WhaleSighting['confidence'][] = ['high', 'medium', 'low']
-const NM_BUFFER = 50 / 60
 
 function makeWhaleSvgUrl(): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
@@ -147,7 +145,6 @@ export default function MapView({
 
   // Refs used across effects without triggering re-runs
   const corridorSightingsRef = useRef<WhaleSighting[]>([])
-  const directPathRef        = useRef<[number, number][] | null>(null)
   const landPolygonsRef      = useRef<Polygon[]>([])
   const sanctuaryPolygonsRef = useRef<Polygon[]>([])
   const sanctuaryAlertsRef   = useRef<IntersectionAlert[]>([])
@@ -379,7 +376,6 @@ export default function MapView({
   // ── Route solver using searoute-ts ────────────────────────────────────────
   const solveRoutes = useCallback((
     layer: GraphicsLayer,
-    whales: WhaleSighting[],
     type: ShipType,
     start: [number, number],
     end: [number, number],
@@ -564,7 +560,7 @@ export default function MapView({
       corridorSightingsRef.current = whales
       hasSolvedOnceRef.current = true
       if (routeLayerRef.current) {
-        solveRoutes(routeLayerRef.current, whales, shipTypeRef.current, start, end)
+        solveRoutes(routeLayerRef.current, shipTypeRef.current, start, end)
       }
     })
 
@@ -578,7 +574,7 @@ export default function MapView({
     const start = startPortRef.current
     const end   = endPortRef.current
     if (!start || !end || !routeLayerRef.current) return
-    solveRoutes(routeLayerRef.current, corridorSightingsRef.current, shipType, start, end)
+    solveRoutes(routeLayerRef.current, shipType, start, end)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipType])
 
